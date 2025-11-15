@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PivotPHP\Routing\Cache;
 
 use PivotPHP\Routing\Contracts\FileCacheInterface;
+use RuntimeException;
 
 /**
  * File-based Cache Strategy
@@ -72,9 +73,21 @@ class FileCacheStrategy implements FileCacheInterface
             return null;
         }
 
-        $data = @include $filePath;
+        if (!is_readable($filePath)) {
+            error_log("Cache file not readable: {$filePath}");
+            $this->stats['misses']++;
+            return null;
+        }
 
-        if ($data === false) {
+        try {
+            $data = include $filePath;
+            if ($data === false) {
+                error_log("Failed to load cache file: {$filePath}");
+                $this->stats['misses']++;
+                return null;
+            }
+        } catch (\Throwable $e) {
+            error_log("Error loading cache file {$filePath}: " . $e->getMessage());
             $this->stats['misses']++;
             return null;
         }
@@ -92,7 +105,11 @@ class FileCacheStrategy implements FileCacheInterface
         $data = var_export($value, true);
         $content = "<?php\n\nreturn {$data};\n";
 
-        file_put_contents($filePath, $content, LOCK_EX);
+        $bytesWritten = @file_put_contents($filePath, $content, LOCK_EX);
+        if ($bytesWritten === false) {
+            error_log("Failed to write cache file: {$filePath}. Check directory permissions.");
+            throw new RuntimeException("Failed to write cache file: {$filePath}");
+        }
         $this->stats['writes']++;
     }
 
@@ -112,7 +129,9 @@ class FileCacheStrategy implements FileCacheInterface
         $filePath = $this->getCacheFilePath($key);
 
         if (file_exists($filePath)) {
-            @unlink($filePath);
+            if (!@unlink($filePath)) {
+                error_log("Failed to delete cache file: {$filePath}");
+            }
         }
     }
 
@@ -121,14 +140,22 @@ class FileCacheStrategy implements FileCacheInterface
      */
     public function clear(): void
     {
-        $files = glob($this->cacheDirectory . '/*.php');
+        $files = @glob($this->cacheDirectory . '/*.php');
 
         if ($files === false) {
+            error_log("Failed to list cache files in: {$this->cacheDirectory}");
             return;
         }
 
+        $failures = [];
         foreach ($files as $file) {
-            @unlink($file);
+            if (!@unlink($file)) {
+                $failures[] = $file;
+            }
+        }
+
+        if (!empty($failures)) {
+            error_log("Failed to delete cache files: " . implode(', ', $failures));
         }
 
         $this->stats = ['hits' => 0, 'misses' => 0, 'writes' => 0];
@@ -211,7 +238,11 @@ class FileCacheStrategy implements FileCacheInterface
         }
 
         $mtime = @filemtime($filePath);
-        return $mtime !== false ? $mtime : null;
+        if ($mtime === false) {
+            error_log("Cannot get file modification time: {$filePath}");
+            return null;
+        }
+        return $mtime;
     }
 
     /**
@@ -231,7 +262,11 @@ class FileCacheStrategy implements FileCacheInterface
         $data = var_export($routes, true);
         $content = "<?php\n\n// Generated route cache\n// " . date('Y-m-d H:i:s') . "\n\nreturn {$data};\n";
 
-        file_put_contents($filePath, $content, LOCK_EX);
+        $bytesWritten = @file_put_contents($filePath, $content, LOCK_EX);
+        if ($bytesWritten === false) {
+            error_log("Failed to write routes cache file: {$filePath}. Check directory permissions.");
+            throw new RuntimeException("Failed to write routes cache file: {$filePath}");
+        }
         $this->stats['writes']++;
     }
 
@@ -246,8 +281,18 @@ class FileCacheStrategy implements FileCacheInterface
             return null;
         }
 
-        $data = @include $filePath;
-        return is_array($data) ? $data : null;
+        if (!is_readable($filePath)) {
+            error_log("Routes cache file not readable: {$filePath}");
+            return null;
+        }
+
+        try {
+            $data = include $filePath;
+            return is_array($data) ? $data : null;
+        } catch (\Throwable $e) {
+            error_log("Error loading routes cache {$filePath}: " . $e->getMessage());
+            return null;
+        }
     }
 
     /**
@@ -273,10 +318,16 @@ class FileCacheStrategy implements FileCacheInterface
     public function ensureCacheDirectoryExists(): bool
     {
         if (!is_dir($this->cacheDirectory)) {
-            return @mkdir($this->cacheDirectory, 0755, true) !== false;
+            if (!@mkdir($this->cacheDirectory, 0755, true) && !is_dir($this->cacheDirectory)) {
+                throw new RuntimeException("Failed to create cache directory: {$this->cacheDirectory}. Check permissions and disk space.");
+            }
         }
 
-        return is_writable($this->cacheDirectory);
+        if (!is_writable($this->cacheDirectory)) {
+            throw new RuntimeException("Cache directory is not writable: {$this->cacheDirectory}");
+        }
+
+        return true;
     }
 
     /**
@@ -295,8 +346,17 @@ class FileCacheStrategy implements FileCacheInterface
             return [];
         }
 
-        $data = @include $filePath;
-        return is_array($data) ? $data : [];
+        if (!is_readable($filePath)) {
+            return [];
+        }
+
+        try {
+            $data = include $filePath;
+            return is_array($data) ? $data : [];
+        } catch (\Throwable $e) {
+            error_log("Error loading patterns cache {$filePath}: " . $e->getMessage());
+            return [];
+        }
     }
 
     /**
@@ -311,6 +371,11 @@ class FileCacheStrategy implements FileCacheInterface
         $data = var_export($patterns, true);
         $content = "<?php\n\n// Generated patterns cache\n// " . date('Y-m-d H:i:s') . "\n\nreturn {$data};\n";
 
-        file_put_contents($filePath, $content, LOCK_EX);
+        $bytesWritten = @file_put_contents($filePath, $content, LOCK_EX);
+        if ($bytesWritten === false) {
+            error_log("Failed to write patterns cache file: {$filePath}. Check directory permissions.");
+            throw new RuntimeException("Failed to write patterns cache file: {$filePath}");
+        }
     }
 }
+
