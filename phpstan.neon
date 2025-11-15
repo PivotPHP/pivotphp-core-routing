@@ -1,0 +1,27 @@
+includes:
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+
+parameters:
+    level: 9
+    paths:
+        - src
+    excludePaths:
+        - src/Router/MockRequest.php
+        - src/Router/MockResponse.php
+    checkMissingIterableValueType: true
+    checkGenericClassInNonGenericObjectType: true
+    reportUnmatchedIgnoredErrors: false
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # Allow static methods in Router class (by design)
+        - '#Call to static method [a-zA-Z]+\(\) on class PivotPHP\\Routing\\Router#'
+
+        # Ignore type casting redundancy (PHPDoc already ensures type safety)
+        - '#Casting to .+ something that''s already#'
+        - '#Call to function is_string\(\) with string will always evaluate to true#'
+        - '#Call to function is_bool\(\) with .+ will always evaluate to true#'
+        - '#Call to function is_callable\(\) with callable.* will always evaluate to true#'
+
+        # Ignore unknown external classes (optional dependencies from pivotphp-core)
+        - '#unknown class PivotPHP\\Core#'
+        - '#Call to static method .+ on an unknown class PivotPHP\\Core#'
