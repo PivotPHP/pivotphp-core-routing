@@ -136,7 +136,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Community
 
-- [Discord](https://discord.gg/DMtxsP7z)
 - [GitHub Issues](https://github.com/PivotPHP/pivotphp-core-routing/issues)
 - [Contributing](CONTRIBUTING.md)
 

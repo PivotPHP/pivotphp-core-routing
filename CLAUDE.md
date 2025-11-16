@@ -354,5 +354,4 @@ $router->registerPlugin(new DebugPlugin());
 ## Support and Community
 
 - **GitHub**: https://github.com/PivotPHP/pivotphp-core-routing
-- **Discord**: https://discord.gg/DMtxsP7z
 - **Packagist**: https://packagist.org/packages/pivotphp/core-routing
