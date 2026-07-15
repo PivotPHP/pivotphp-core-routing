@@ -229,18 +229,18 @@ class ParameterRoutingTest extends TestCase
     {
         Router::group(
             '/api/v1',
-            function () {
-                Router::group(
+            function ($router) {
+                $router->group(
                     '/users',  // ← Path relativo
-                    function () {
-                        Router::get(
+                    function ($group) {
+                        $group->get(
                             '/:id/profile',  // ← Path relativo
                             function () {
                                 return 'user profile';
                             }
                         );
 
-                        Router::get(
+                        $group->get(
                             '/:id/posts/:postId',  // ← Path relativo
                             function () {
                                 return 'user post';

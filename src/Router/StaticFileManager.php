@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace PivotPHP\Routing\Router;
 
-use PivotPHP\Core\Exceptions\HttpException;
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * Static File Manager (Façade + Advanced Features)
@@ -29,7 +30,7 @@ use PivotPHP\Core\Exceptions\HttpException;
  * - register() → Mantém compatibilidade com método antigo
  * - Funcionalidades extras: listFiles(), generateRouteMap(), cache management
  *
- * @package PivotPHP\Core\Routing
+ * @package PivotPHP\Routing\Router
  * @since 1.1.3
  */
 class StaticFileManager
@@ -120,11 +121,10 @@ class StaticFileManager
     public static function registerDirectory(
         string $routePrefix,
         string $physicalPath,
-        \PivotPHP\Core\Core\Application $app,
         array $options = []
     ): void {
         // Delega para o SimpleStaticFileManager
-        \PivotPHP\Core\Routing\SimpleStaticFileManager::registerDirectory($routePrefix, $physicalPath, $app, $options);
+        SimpleStaticFileManager::registerDirectory($routePrefix, $physicalPath, $options);
     }
 
     /**
@@ -133,7 +133,7 @@ class StaticFileManager
      * @param string $routePrefix Prefixo da rota (ex: '/public/js')
      * @param string $physicalPath Pasta física (ex: 'src/bundle/js')
      * @param array<string, mixed> $options Opções adicionais
-     * @return callable(\PivotPHP\Core\Http\Request, \PivotPHP\Core\Http\Response): \PivotPHP\Core\Http\Response
+     * @return callable(ServerRequestInterface, ResponseInterface): ResponseInterface
      * @deprecated Use registerDirectory() no lugar
      */
     public static function register(
@@ -183,20 +183,20 @@ class StaticFileManager
 
     /**
      * Cria handler otimizado para servir arquivos
-     * @return callable(\PivotPHP\Core\Http\Request, \PivotPHP\Core\Http\Response): \PivotPHP\Core\Http\Response
+     * @return callable(ServerRequestInterface, ResponseInterface): ResponseInterface
      */
     private static function createFileHandler(string $routePrefix): callable
     {
         return function (
-            \PivotPHP\Core\Http\Request $req,
-            \PivotPHP\Core\Http\Response $res
-        ) use ($routePrefix): \PivotPHP\Core\Http\Response {
+            ServerRequestInterface $req,
+            ResponseInterface $res
+        ) use ($routePrefix): ResponseInterface {
             // Extrai filepath do path da requisição removendo o prefixo
-            $requestPath = $req->getPathCallable();
+            $requestPath = $req->getUri()->getPath();
 
             // Remove o prefixo da rota para obter o caminho relativo do arquivo
             if (!str_starts_with($requestPath, $routePrefix)) {
-                throw new HttpException(404, 'Path does not match route prefix');
+                throw new \RuntimeException('Path does not match route prefix', 404);
             }
 
             $relativePath = substr($requestPath, strlen($routePrefix));
@@ -211,11 +211,11 @@ class StaticFileManager
             $fileInfo = self::resolveFile($routePrefix, $relativePath);
 
             if ($fileInfo === null) {
-                throw new HttpException(404, 'File not found');
+                throw new \RuntimeException('File not found', 404);
             }
 
             // Serve o arquivo
-            return self::serveFile($fileInfo, $req, $res);
+            return self::serveFile($fileInfo, $res);
         };
     }
 
@@ -301,9 +301,8 @@ class StaticFileManager
      */
     private static function serveFile(
         array $fileInfo,
-        \PivotPHP\Core\Http\Request $req,
-        \PivotPHP\Core\Http\Response $res
-    ): \PivotPHP\Core\Http\Response {
+        ResponseInterface $res
+    ): ResponseInterface {
         self::$stats['total_hits']++;
 
         // Headers de cache
@@ -341,15 +340,11 @@ class StaticFileManager
         // Lê e envia conteúdo do arquivo
         $content = file_get_contents($fileInfo['path']);
         if ($content === false) {
-            throw new HttpException(
-                500,
-                'Unable to read file: ' . $fileInfo['path'],
-                ['Content-Type' => 'application/json']
-            );
+            throw new \RuntimeException('Unable to read file: ' . $fileInfo['path'], 500);
         }
 
-        // Define o body e retorna response
-        $res = $res->withBody(\PivotPHP\Core\Http\Pool\Psr7Pool::getStream($content));
+        // Define o body no stream já fornecido pela implementação PSR-7 e retorna
+        $res->getBody()->write($content);
         return $res;
     }
 

@@ -133,9 +133,9 @@ class ArrayCallableTest extends TestCase
     {
         Router::group(
             '/api/v1',
-            function () {
-                Router::get('/api/v1/health', [$this->controller, 'healthCheck']);
-                Router::get('/api/v1/users/:id', [$this->controller, 'show']);
+            function ($router) {
+                $router->get('/health', [$this->controller, 'healthCheck']);
+                $router->get('/users/:id', [$this->controller, 'show']);
             }
         );
 

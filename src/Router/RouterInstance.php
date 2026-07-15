@@ -3,6 +3,8 @@
 namespace PivotPHP\Routing\Router;
 
 use InvalidArgumentException;
+use Closure;
+use ReflectionFunction;
 use PivotPHP\Routing\Utils\Arr;
 
 /**
@@ -16,13 +18,15 @@ class RouterInstance
      */
     private array $routes = [];
     /**
+     * Middlewares aplicados a todas as rotas deste grupo.
      * @var callable[]
      */
-    private array $middlewares = [];
+    private array $groupMiddlewares = [];
 
-    public function __construct(string $prefix = '/')
+    public function __construct(string $prefix = '/', array $groupMiddlewares = [])
     {
-        $this->prefix = $prefix;
+        $this->prefix = $prefix === '' ? '/' : $prefix;
+        $this->groupMiddlewares = $groupMiddlewares;
     }
 
     /**
@@ -30,7 +34,7 @@ class RouterInstance
      */
     public function use(callable $middleware): void
     {
-        $this->middlewares[] = $middleware;
+        $this->groupMiddlewares[] = $middleware;
     }
 
     /**
@@ -176,7 +180,8 @@ class RouterInstance
         $this->routes[] = [
             'method' => strtoupper($method),
             'path' => $fullPath,
-            'middlewares' => array_merge($this->middlewares, $handlers),
+            // Inclui middlewares do grupo (e aninhados) junto aos específicos da rota
+            'middlewares' => array_merge($this->groupMiddlewares, $handlers),
             'handler' => $handler,
             'metadata' => $metadata
         ];
@@ -203,21 +208,41 @@ class RouterInstance
     }
 
     /**
+     * Middlewares associados ao grupo (use).
+     */
+    public function getGroupMiddlewares(): array
+    {
+        return $this->groupMiddlewares;
+    }
+
+    /**
      * Cria um grupo de rotas com prefixo adicional.
      *
      * @param  string   $prefix
      * @param  callable $callback
      * @return void
      */
-    public function group(string $prefix, callable $callback): void
+    public function group(string $prefix, callable $callback, array $middlewares = []): void
     {
         $previousPrefix = $this->prefix;
+        $previousMiddlewares = $this->groupMiddlewares;
         $this->prefix = rtrim($this->prefix, '/') . '/' . ltrim($prefix, '/');
         $this->prefix = preg_replace('/\/+/', '/', $this->prefix) ?? $this->prefix;
 
-        $callback($this);
+        if (count($middlewares) > 0) {
+            $this->groupMiddlewares = array_merge($this->groupMiddlewares, $middlewares);
+        }
+
+        // Callbacks declarados sem parâmetro não esperam receber o RouterInstance.
+        $arity = (new ReflectionFunction(Closure::fromCallable($callback)))->getNumberOfParameters();
+        if ($arity === 0) {
+            $callback();
+        } else {
+            $callback($this);
+        }
 
         $this->prefix = $previousPrefix;
+        $this->groupMiddlewares = $previousMiddlewares;
     }
 
     /**
@@ -228,6 +253,6 @@ class RouterInstance
     public function clear(): void
     {
         $this->routes = [];
-        $this->middlewares = [];
+        $this->groupMiddlewares = [];
     }
 }

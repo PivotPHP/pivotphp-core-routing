@@ -5,8 +5,6 @@ namespace PivotPHP\Routing\Tests\Integration;
 use PHPUnit\Framework\TestCase;
 use PivotPHP\Routing\Router\Router;
 use PivotPHP\Routing\Router\RouteCache;
-use PivotPHP\Core\Http\Request;
-use PivotPHP\Core\Http\Response;
 
 class RegexRoutingIntegrationTest extends TestCase
 {
@@ -29,7 +27,7 @@ class RegexRoutingIntegrationTest extends TestCase
     {
         Router::get(
             '/users/:id<\d+>',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(['user_id' => $req->param('id')]);
             }
         );
@@ -51,7 +49,7 @@ class RegexRoutingIntegrationTest extends TestCase
     {
         Router::get(
             '/posts/:slug<slug>',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(['slug' => $req->param('slug')]);
             }
         );
@@ -76,7 +74,7 @@ class RegexRoutingIntegrationTest extends TestCase
     {
         Router::get(
             '/archive/:year<year>/:month<month>/:day<day>',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(
                     [
                         'year' => $req->param('year'),
@@ -107,7 +105,7 @@ class RegexRoutingIntegrationTest extends TestCase
     {
         Router::get(
             '/api/resources/:uuid<uuid>',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(['uuid' => $req->param('uuid')]);
             }
         );
@@ -134,7 +132,7 @@ class RegexRoutingIntegrationTest extends TestCase
     {
         Router::get(
             '/files/:filename<[\w-]+>.:ext<jpg|png|gif|webp>',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(
                     [
                         'filename' => $req->param('filename'),
@@ -166,7 +164,7 @@ class RegexRoutingIntegrationTest extends TestCase
     {
         Router::get(
             '/contact/:email<[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}>',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(['email' => $req->param('email')]);
             }
         );
@@ -205,14 +203,14 @@ class RegexRoutingIntegrationTest extends TestCase
         // Rotas com diferentes constraints para o mesmo path base
         Router::get(
             '/items/:id<\d+>',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(['type' => 'numeric', 'id' => $req->param('id')]);
             }
         );
 
         Router::get(
             '/items/:slug<slug>',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(['type' => 'slug', 'slug' => $req->param('slug')]);
             }
         );
@@ -235,7 +233,7 @@ class RegexRoutingIntegrationTest extends TestCase
     {
         Router::get(
             '/books/:isbn<\d{3}-\d{10}>',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(['isbn' => $req->param('isbn')]);
             }
         );
@@ -266,7 +264,7 @@ class RegexRoutingIntegrationTest extends TestCase
     {
         Router::get(
             '/api/:version<v\d+>/users',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(['version' => $req->param('version')]);
             }
         );
@@ -294,7 +292,7 @@ class RegexRoutingIntegrationTest extends TestCase
         // Rotas antigas sem constraints devem continuar funcionando
         Router::get(
             '/old/route/:id',
-            function (Request $req, Response $res) {
+            function ($req, $res) {
                 return $res->json(['id' => $req->param('id')]);
             }
         );
@@ -314,17 +312,17 @@ class RegexRoutingIntegrationTest extends TestCase
     {
         Router::group(
             '/admin',
-            function () {
-                Router::get(
+            function ($router) {
+                $router->get(
                     '/users/:id<\d+>',
-                    function (Request $req, Response $res) {
+                    function ($req, $res) {
                         return $res->json(['admin_user_id' => $req->param('id')]);
                     }
                 );
 
-                Router::get(
+                $router->get(
                     '/posts/:slug<slug>',
-                    function (Request $req, Response $res) {
+                    function ($req, $res) {
                         return $res->json(['admin_post_slug' => $req->param('slug')]);
                     }
                 );
@@ -363,7 +361,7 @@ class RegexRoutingIntegrationTest extends TestCase
         for ($i = 1; $i <= 100; $i++) {
             Router::get(
                 "/route{$i}/:id<\d+>",
-                function (Request $req, Response $res) use ($i) {
+                function ($req, $res) use ($i) {
                     return $res->json(['route' => $i, 'id' => $req->param('id')]);
                 }
             );
