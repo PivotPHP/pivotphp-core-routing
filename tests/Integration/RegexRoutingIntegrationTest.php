@@ -5,8 +5,6 @@ namespace PivotPHP\Routing\Tests\Integration;
 use PHPUnit\Framework\TestCase;
 use PivotPHP\Routing\Router\Router;
 use PivotPHP\Routing\Router\RouteCache;
-use PivotPHP\Core\Http\Request;
-use PivotPHP\Core\Http\Response;
 
 class RegexRoutingIntegrationTest extends TestCase
 {
@@ -314,15 +312,15 @@ class RegexRoutingIntegrationTest extends TestCase
     {
         Router::group(
             '/admin',
-            function () {
-                Router::get(
+            function ($router) {
+                $router->get(
                     '/users/:id<\d+>',
                     function (Request $req, Response $res) {
                         return $res->json(['admin_user_id' => $req->param('id')]);
                     }
                 );
 
-                Router::get(
+                $router->get(
                     '/posts/:slug<slug>',
                     function (Request $req, Response $res) {
                         return $res->json(['admin_post_slug' => $req->param('slug')]);
