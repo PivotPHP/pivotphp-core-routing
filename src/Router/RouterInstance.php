@@ -3,6 +3,8 @@
 namespace PivotPHP\Routing\Router;
 
 use InvalidArgumentException;
+use Closure;
+use ReflectionFunction;
 use PivotPHP\Routing\Utils\Arr;
 
 /**
@@ -231,7 +233,13 @@ class RouterInstance
             $this->groupMiddlewares = array_merge($this->groupMiddlewares, $middlewares);
         }
 
-        $callback($this);
+        // Callbacks declarados sem parâmetro não esperam receber o RouterInstance.
+        $arity = (new ReflectionFunction(Closure::fromCallable($callback)))->getNumberOfParameters();
+        if ($arity === 0) {
+            $callback();
+        } else {
+            $callback($this);
+        }
 
         $this->prefix = $previousPrefix;
         $this->groupMiddlewares = $previousMiddlewares;

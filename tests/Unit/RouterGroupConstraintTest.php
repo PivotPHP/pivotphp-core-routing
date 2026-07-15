@@ -142,4 +142,78 @@ class RouterGroupConstraintTest extends TestCase
         $this->assertNotNull($identified);
         $this->assertEquals('999', $identified['matched_params']['id']);
     }
+
+    /**
+     * Regression test for the legacy API (published in v1.0.0): a group
+     * callback declared with no parameters must still work exactly as
+     * before — routes registered via static Router::method() calls inside
+     * it, with group middlewares actually applied to them. This is
+     * distinct from the current RouterInstance-based API (callback
+     * declared with one parameter).
+     */
+    public function testLegacyZeroArgCallbackStillReceivesGroupMiddlewares(): void
+    {
+        $middlewareCalled = false;
+        $authMiddleware = function ($req, $res, $next) use (&$middlewareCalled) {
+            $middlewareCalled = true;
+            return $next($req, $res);
+        };
+
+        Router::group(
+            '/legacy',
+            function () {
+                Router::get(
+                    '/ping',
+                    function () {
+                        return 'pong';
+                    }
+                );
+            },
+            [$authMiddleware]
+        );
+
+        $route = Router::identify('GET', '/legacy/ping');
+        $this->assertNotNull($route);
+        $this->assertContains($authMiddleware, $route['middlewares']);
+
+        // The middleware is only recorded on the route, not literally
+        // invoked by identify() — confirm it wasn't silently dropped by
+        // actually running it.
+        $next = function ($req, $res) {
+            return $res;
+        };
+        ($route['middlewares'][0])(null, null, $next);
+        $this->assertTrue($middlewareCalled);
+    }
+
+    /**
+     * Same legacy callback style, but for the current RouterInstance-based
+     * API: a zero-arg callback passed to $router->group() must not throw
+     * (PHP itself doesn't error on unused extra arguments, but the callback
+     * must still execute without needing $router).
+     */
+    public function testNestedGroupWithZeroArgCallbackDoesNotThrow(): void
+    {
+        Router::group(
+            '/outer',
+            function ($router) {
+                $router->group(
+                    '/inner',
+                    function () {
+                        Router::get(
+                            '/ping',
+                            function () {
+                                return 'pong';
+                            }
+                        );
+                    }
+                );
+            }
+        );
+
+        // No exception thrown registering the nested zero-arg group is the
+        // primary assertion here (Copilot flagged this as a potential
+        // ArgumentCountError risk).
+        $this->assertTrue(true);
+    }
 }

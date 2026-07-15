@@ -4,6 +4,8 @@ namespace PivotPHP\Routing\Router;
 
 use InvalidArgumentException;
 use BadMethodCallException;
+use Closure;
+use ReflectionFunction;
 use PivotPHP\Routing\Utils\CallableResolver;
 
 /**
@@ -154,26 +156,46 @@ class Router
         // Mantém prefixo atual para herança durante o cadastro
         self::$current_group_prefix = $prefix;
 
-        // Instancia RouterInstance com prefixo e middlewares herdados
-        $groupRouter = new RouterInstance($prefix, $allMiddlewares);
+        // Compatibilidade com a API legada (v1.0.0): callbacks declarados sem
+        // parâmetro (`function () { self::get(...); }`) continuam usando
+        // chamadas estáticas dentro do callback e precisam que os middlewares
+        // do grupo fiquem disponíveis via self::$groupMiddlewares — só assim
+        // self::add()/getGroupMiddlewaresForPath() os aplica. Callbacks que
+        // declaram um parâmetro recebem um RouterInstance explícito (API
+        // atual, suporta grupos aninhados de forma isolada).
+        $arity = (new ReflectionFunction(Closure::fromCallable($callback)))->getNumberOfParameters();
 
-        // Executa o callback com o router de grupo explícito
-        call_user_func($callback, $groupRouter);
+        if ($arity === 0) {
+            if (count($allMiddlewares) > 0) {
+                self::$groupMiddlewares[$prefix] = $allMiddlewares;
+            }
 
-        // Registra as rotas coletadas pelo RouterInstance.
-        // current_group_prefix permanece = $prefix durante o loop: o path de cada
-        // rota já vem completo do RouterInstance, e optimizePathProcessing() só
-        // prefixa se o path ainda não começar com o prefixo — então não duplica.
-        // Zerar aqui faria add() gravar group_prefix='' na rota, quebrando o
-        // indexamento usado por identifyByGroup().
-        $routes = $groupRouter->getRoutes();
-        foreach ($routes as $route) {
-            $method = is_string($route['method'] ?? null) ? $route['method'] : 'GET';
-            $path = is_string($route['path'] ?? null) ? $route['path'] : self::DEFAULT_PATH;
-            $handler = $route['handler'];
-            $metadata = $route['metadata'] ?? [];
-            $routeMiddlewares = $route['middlewares'] ?? [];
-            self::add($method, $path, $handler, $metadata, ...$routeMiddlewares);
+            call_user_func($callback);
+        } else {
+            // Instancia RouterInstance com prefixo e middlewares herdados
+            $groupRouter = new RouterInstance($prefix, $allMiddlewares);
+
+            // Executa o callback com o router de grupo explícito
+            call_user_func($callback, $groupRouter);
+
+            // Registra as rotas coletadas pelo RouterInstance.
+            // current_group_prefix permanece = $prefix durante o loop: o path de cada
+            // rota já vem completo do RouterInstance, e optimizePathProcessing() só
+            // prefixa se o path ainda não começar com o prefixo — então não duplica.
+            // Zerar aqui faria add() gravar group_prefix='' na rota, quebrando o
+            // indexamento usado por identifyByGroup(). Middlewares do grupo não são
+            // registrados em self::$groupMiddlewares neste caminho: RouterInstance já
+            // os aplica diretamente a cada rota coletada, e getGroupMiddlewaresForPath()
+            // duplicaria caso o prefixo também estivesse mapeado ali.
+            $routes = $groupRouter->getRoutes();
+            foreach ($routes as $route) {
+                $method = is_string($route['method'] ?? null) ? $route['method'] : 'GET';
+                $path = is_string($route['path'] ?? null) ? $route['path'] : self::DEFAULT_PATH;
+                $handler = $route['handler'];
+                $metadata = $route['metadata'] ?? [];
+                $routeMiddlewares = $route['middlewares'] ?? [];
+                self::add($method, $path, $handler, $metadata, ...$routeMiddlewares);
+            }
         }
 
         // Restaura o prefixo anterior
