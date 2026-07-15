@@ -25,22 +25,22 @@ class RouterGroupConstraintTest extends TestCase
         // Registra rotas no grupo /api
         Router::group(
             '/api',
-            function () {
-                Router::get(
+            function ($router) {
+                $router->get(
                     '/users/:id<\d+>',
                     function () {
                         return 'user by id';
                     }
                 );
 
-                Router::get(
+                $router->get(
                     '/posts/:year<\d{4}>/:month<\d{2}>/:slug<[a-z0-9-]+>',
                     function () {
                         return 'post by date and slug';
                     }
                 );
 
-                Router::get(
+                $router->get(
                     '/products/:sku<[A-Z]{3}-\d{4}>',
                     function () {
                         return 'product by sku';
@@ -89,11 +89,11 @@ class RouterGroupConstraintTest extends TestCase
         // Grupos aninhados - agora com paths relativos corretos
         Router::group(
             '/v1',
-            function () {
-                Router::group(
+            function ($router) {
+                $router->group(
                     '/admin',  // ← Path relativo ao grupo pai
-                    function () {
-                        Router::get(
+                    function ($group) {
+                        $group->get(
                             '/users/:id<\d+>/edit',  // ← Path relativo ao grupo pai
                             function () {
                                 return 'edit user';
@@ -118,9 +118,9 @@ class RouterGroupConstraintTest extends TestCase
     {
         Router::group(
             '/test',
-            function () {
-                Router::get(
-                    '/test/item/:id<\d+>',
+            function ($router) {
+                $router->get(
+                    '/item/:id<\d+>',  // ← Path relativo ao grupo pai
                     function () {
                         return 'item';
                     }

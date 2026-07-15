@@ -301,8 +301,8 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyRouteInGroup(): void
     {
-        Router::group('/api', function () {
-            Router::get('/users', function () {
+        Router::group('/api', function ($router) {
+            $router->get('/users', function () {
                 return 'api users';
             });
         });
@@ -320,9 +320,9 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyRouteInNestedGroups(): void
     {
-        Router::group('/api', function () {
-            Router::group('/v1', function () {
-                Router::get('/users', function () {
+        Router::group('/api', function ($router) {
+            $router->group('/v1', function ($group) {
+                $group->get('/users', function () {
                     return 'api v1 users';
                 });
             });
@@ -502,12 +502,22 @@ class RouteCompilationAndIdentificationTest extends TestCase
         Router::get('/about', function () { return 'about'; });
         Router::get('/contact', function () { return 'contact'; });
 
-        Router::group('/api', function () {
-            Router::get('/users', function () { return 'users list'; });
-            Router::get('/users/:id<\d+>', function () { return 'user detail'; });
-            Router::post('/users', function () { return 'create user'; });
-            Router::put('/users/:id<\d+>', function () { return 'update user'; });
-            Router::delete('/users/:id<\d+>', function () { return 'delete user'; });
+        Router::group('/api', function ($router) {
+            $router->get('/users', function () {
+                return 'users list';
+            });
+            $router->get('/users/:id<\d+>', function () {
+                return 'user detail';
+            });
+            $router->post('/users', function () {
+                return 'create user';
+            });
+            $router->put('/users/:id<\d+>', function () {
+                return 'update user';
+            });
+            $router->delete('/users/:id<\d+>', function () {
+                return 'delete user';
+            });
         });
 
         // Testa várias identificações (sem nested groups)
@@ -630,10 +640,10 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testNestedGroupsWithMultipleLevels(): void
     {
-        Router::group('/api', function () {
-            Router::group('/v1', function () {
-                Router::group('/admin', function () {
-                    Router::get('/users', function () {
+        Router::group('/api', function ($router) {
+            $router->group('/v1', function ($group) {
+                $group->group('/admin', function ($admin) {
+                    $admin->get('/users', function () {
                         return 'admin users v1';
                     });
                 });
@@ -660,9 +670,9 @@ class RouteCompilationAndIdentificationTest extends TestCase
             return 'middleware2';
         };
 
-        Router::group('/api', function () use ($middleware2) {
-            Router::group('/v1', function () {
-                Router::get('/users', function () {
+        Router::group('/api', function ($router) use ($middleware2) {
+            $router->group('/v1', function ($group) {
+                $group->get('/users', function () {
                     return 'users';
                 });
             }, [$middleware2]);
@@ -682,15 +692,15 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testNestedGroupsWithDifferentPaths(): void
     {
-        Router::group('/api', function () {
-            Router::group('/v1', function () {
-                Router::get('/users', function () {
+        Router::group('/api', function ($router) {
+            $router->group('/v1', function ($group) {
+                $group->get('/users', function () {
                     return 'v1 users';
                 });
             });
 
-            Router::group('/v2', function () {
-                Router::get('/users', function () {
+            $router->group('/v2', function ($group) {
+                $group->get('/users', function () {
                     return 'v2 users';
                 });
             });
@@ -711,9 +721,9 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testNestedGroupsWithParameters(): void
     {
-        Router::group('/api', function () {
-            Router::group('/v1', function () {
-                Router::get('/users/:id', function () {
+        Router::group('/api', function ($router) {
+            $router->group('/v1', function ($group) {
+                $group->get('/users/:id', function () {
                     return 'user detail';
                 });
             });
@@ -733,9 +743,9 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testNestedGroupsWithTrailingSlash(): void
     {
-        Router::group('/api', function () {
-            Router::group('/v1', function () {
-                Router::get('/users', function () {
+        Router::group('/api', function ($router) {
+            $router->group('/v1', function ($group) {
+                $group->get('/users', function () {
                     return 'users';
                 });
             });

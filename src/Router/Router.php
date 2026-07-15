@@ -147,20 +147,34 @@ class Router
             $prefix = $previousPrefix . $prefix;
         }
 
-        // Define o prefixo atual (agora pode ser concatenado)
-        self::$current_group_prefix = $prefix;
-
         // NESTED GROUPS: Mesclar middlewares do grupo pai
         $parentMiddlewares = self::$groupMiddlewares[$previousPrefix] ?? [];
         $allMiddlewares = array_merge($parentMiddlewares, $middlewares);
 
-        // Armazena middlewares do grupo (incluindo os herdados do pai)
-        if (count($allMiddlewares) > 0) {
-            self::$groupMiddlewares[$prefix] = $allMiddlewares;
-        }
+        // Mantém prefixo atual para herança durante o cadastro
+        self::$current_group_prefix = $prefix;
 
-        // Executa o callback para registrar as rotas do grupo
-        call_user_func($callback);
+        // Instancia RouterInstance com prefixo e middlewares herdados
+        $groupRouter = new RouterInstance($prefix, $allMiddlewares);
+
+        // Executa o callback com o router de grupo explícito
+        call_user_func($callback, $groupRouter);
+
+        // Registra as rotas coletadas pelo RouterInstance.
+        // current_group_prefix permanece = $prefix durante o loop: o path de cada
+        // rota já vem completo do RouterInstance, e optimizePathProcessing() só
+        // prefixa se o path ainda não começar com o prefixo — então não duplica.
+        // Zerar aqui faria add() gravar group_prefix='' na rota, quebrando o
+        // indexamento usado por identifyByGroup().
+        $routes = $groupRouter->getRoutes();
+        foreach ($routes as $route) {
+            $method = is_string($route['method'] ?? null) ? $route['method'] : 'GET';
+            $path = is_string($route['path'] ?? null) ? $route['path'] : self::DEFAULT_PATH;
+            $handler = $route['handler'];
+            $metadata = $route['metadata'] ?? [];
+            $routeMiddlewares = $route['middlewares'] ?? [];
+            self::add($method, $path, $handler, $metadata, ...$routeMiddlewares);
+        }
 
         // Restaura o prefixo anterior
         self::$current_group_prefix = $previousPrefix;
@@ -171,7 +185,13 @@ class Router
 
         // Registra estatísticas
         $executionTime = (microtime(true) - $startTime) * 1000;
-        $routesCount = count(self::$groupIndex[$prefix]);
+        $routesCount = isset(self::$groupIndex[$prefix])
+            ? array_reduce(
+                self::$groupIndex[$prefix],
+                static fn(int $carry, array $routeList): int => $carry + count($routeList),
+                0
+            )
+            : 0;
 
         self::$stats['groups'][$prefix] = [
             'registration_time_ms' => $executionTime,

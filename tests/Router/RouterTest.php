@@ -6,8 +6,6 @@ namespace PivotPHP\Tests\Routing;
 
 use PHPUnit\Framework\TestCase;
 use PivotPHP\Routing\Router\Router;
-use PivotPHP\Core\Http\Request;
-use PivotPHP\Core\Http\Response;
 
 class RouterTest extends TestCase
 {
@@ -236,13 +234,13 @@ class RouterTest extends TestCase
     {
         Router::group(
             '/api',
-            function () {
-                Router::get(
+            function ($router) {
+                $router->get(
                     '/users',
                     function () {
                     }
                 );
-                Router::post(
+                $router->post(
                     '/users',
                     function () {
                     }
