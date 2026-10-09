@@ -137,21 +137,17 @@ class ParameterRoutingTest extends TestCase
      */
     public function testOptionalParameters(): void
     {
+        // Parâmetros opcionais (:param?) não são suportados e devem ser rejeitados
+        // com erro claro no registro (SPEC-026).
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Optional route parameters are not supported');
+
         Router::get(
             '/search/:query/:page?',
             function () {
                 return 'search';
             }
         );
-
-        // With page parameter
-        $route1 = Router::identify('GET', '/search/php/2');
-        $this->assertNotNull($route1);
-
-        // Without page parameter - this depends on implementation
-        // For now, we'll test the basic parameter functionality
-        $route2 = Router::identify('GET', '/search/php');
-        // This might be null if optional parameters aren't implemented yet
     }
 
     /**
