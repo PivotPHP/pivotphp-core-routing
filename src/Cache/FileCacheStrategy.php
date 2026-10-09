@@ -101,6 +101,8 @@ class FileCacheStrategy implements FileCacheInterface
      */
     public function set(string $key, mixed $value, ?int $ttl = null): void
     {
+        $this->assertExportable($value);
+
         $filePath = $this->getCacheFilePath($key);
         $data = var_export($value, true);
         $content = "<?php\n\nreturn {$data};\n";
@@ -258,6 +260,8 @@ class FileCacheStrategy implements FileCacheInterface
      */
     public function writeRoutesCache(array $routes): void
     {
+        $this->assertExportable($routes);
+
         $filePath = $this->cacheDirectory . '/' . $this->cacheFile;
         $data = var_export($routes, true);
         $content = "<?php\n\n// Generated route cache\n// " . date('Y-m-d H:i:s') . "\n\nreturn {$data};\n";
@@ -377,5 +381,25 @@ class FileCacheStrategy implements FileCacheInterface
             throw new RuntimeException("Failed to write patterns cache file: {$filePath}");
         }
     }
-}
 
+    /**
+     * Recusa valores que não podem ser reexportados via var_export()/include
+     * (ex.: Closure) — o cache em arquivo só aceita valores serializáveis.
+     *
+     * @throws \InvalidArgumentException
+     */
+    private function assertExportable(mixed $value): void
+    {
+        if ($value instanceof \Closure) {
+            throw new \InvalidArgumentException(
+                'FileCacheStrategy cannot cache closures — use a serializable handler instead.'
+            );
+        }
+
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                $this->assertExportable($item);
+            }
+        }
+    }
+}
