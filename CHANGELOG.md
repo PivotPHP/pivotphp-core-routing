@@ -38,3 +38,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (the class is instantiated at call time) instead of throwing
   `InvalidArgumentException`. Static methods and instance array callables keep
   working as before. ([SPEC-003](https://github.com/PivotPHP/pivotphp-specs/blob/main/SPECS/SPEC-003-array-callable.md))
+
+## [1.1.0] - 2026-07-15
+
+### Added
+
+- Nested route groups via an explicit `RouterInstance`.
+
+### Fixed
+
+- `StaticFileManager`/`SimpleStaticFileManager` decoupled from `pivotphp/core`, usable
+  standalone.
+- Legacy zero-argument `group()` callback support restored.
+
+### Removed
+
+- Integration tests coupled to `pivotphp/core`.
+
+## [1.0.0] - 2025-11-15
+
+### Added
+
+- Initial release: Express.js-inspired routing API (`get`, `post`, `put`, `delete`, `patch`,
+  `group`) with PSR-7/PSR-15 compliance, file caching, and memory caching.
+
+## Tag convention
+
+Tags use a `v` prefix (e.g. `v1.2.0`). The tags `1.0.0` and `1.1.0` predate this convention
+and are kept as-is for backward compatibility with Packagist.
+
+[1.2.2]: https://github.com/PivotPHP/pivotphp-core-routing/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/PivotPHP/pivotphp-core-routing/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/PivotPHP/pivotphp-core-routing/compare/1.1.0...v1.2.0
+[1.1.0]: https://github.com/PivotPHP/pivotphp-core-routing/compare/1.0.0...1.1.0
+[1.0.0]: https://github.com/PivotPHP/pivotphp-core-routing/releases/tag/1.0.0
