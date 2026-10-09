@@ -71,6 +71,12 @@ class Router
     public const DEFAULT_PATH = '/';
 
     /**
+     * Limite de entradas por cache de URL (prefixMatchCache/exactMatchCache)
+     * para evitar crescimento sem limite em workers persistentes (SPEC-046).
+     */
+    private const MAX_CACHE_ENTRIES = 1000;
+
+    /**
      * Métodos HTTP aceitos.
      * @var array<string>
      */
@@ -328,11 +334,6 @@ class Router
 
         $startTime = microtime(true);
 
-        // Memory management: track route access
-        $routeKey = self::createRouteKey($method, $path);
-        $memoryManager = self::getMemoryManager();
-        $memoryManager->recordRouteAccess($routeKey);
-
         // 1. Tenta primeiro por grupos otimizados
         $route = self::identifyByGroup($method, $path);
 
@@ -390,6 +391,7 @@ class Router
         if ($matchingPrefix) {
             // Cache o resultado do matching
             self::$prefixMatchCache[$cacheKey] = $matchingPrefix;
+            self::limitCacheSize(self::$prefixMatchCache);
             $route = self::findRouteInGroup($matchingPrefix, $method, $path);
 
             // Atualiza estatísticas de acesso
@@ -473,6 +475,7 @@ class Router
         $cachedRoute = RouteCache::get($exactKey);
         if ($cachedRoute !== null) {
             self::$exactMatchCache[$exactKey] = $cachedRoute;
+            self::limitCacheSize(self::$exactMatchCache);
             return $cachedRoute;
         }
 
@@ -506,6 +509,7 @@ class Router
 
             if ($normalizedRoutePath === $normalizedPath) {
                 self::$exactMatchCache[$exactKey] = $route;
+                self::limitCacheSize(self::$exactMatchCache);
                 return $route;
             }
         }
@@ -516,6 +520,7 @@ class Router
             if ($matchedRoute !== null) {
                 // Cache para próximas consultas idênticas
                 self::$exactMatchCache[$exactKey] = $matchedRoute;
+                self::limitCacheSize(self::$exactMatchCache);
                 return $matchedRoute;
             }
         }
@@ -583,6 +588,20 @@ class Router
     private static function createRouteKey(string $method, string $path): string
     {
         return $method . '::' . $path;
+    }
+
+    /**
+     * Mantém um cache de URL dentro de um limite fixo, descartando as entradas
+     * mais antigas (ordem de inserção). Evita crescimento sem limite por URL
+     * concreta em workers persistentes (SPEC-046).
+     *
+     * @param array<string, mixed> $cache
+     */
+    private static function limitCacheSize(array &$cache): void
+    {
+        if (count($cache) > self::MAX_CACHE_ENTRIES) {
+            $cache = array_slice($cache, -self::MAX_CACHE_ENTRIES, null, true);
+        }
     }
 
     /**
