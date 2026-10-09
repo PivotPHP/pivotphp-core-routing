@@ -53,17 +53,6 @@ class RouteCache
     ];
 
     /**
-     * Cache para cálculos de uso de memória
-     * @var array<string, mixed>|null
-     */
-    private static ?array $memoryUsageCache = null;
-
-    /**
-     * Hash dos dados para invalidação do cache de memória
-     */
-    private static ?string $lastDataHash = null;
-
-    /**
      * Mapeamento de shortcuts para constraints regex
      */
     private const CONSTRAINT_SHORTCUTS = [
@@ -111,7 +100,6 @@ class RouteCache
     public static function set(string $key, array $route): void
     {
         self::$compiledRoutes[$key] = $route;
-        self::invalidateMemoryCache();
     }
 
     /**
@@ -137,7 +125,6 @@ class RouteCache
     {
         self::$compiledPatterns[$path] = $pattern;
         self::$stats['compilations']++;
-        self::invalidateMemoryCache();
     }
 
     /**
@@ -156,7 +143,6 @@ class RouteCache
     public static function setParameters(string $path, array $parameters): void
     {
         self::$parameterMappings[$path] = $parameters;
-        self::invalidateMemoryCache();
     }
 
     /**
@@ -616,7 +602,6 @@ class RouteCache
     public static function remove(string $key): void
     {
         unset(self::$compiledRoutes[$key]);
-        self::invalidateMemoryCache();
     }
 
     /**
@@ -640,15 +625,6 @@ class RouteCache
     }
 
     /**
-     * Invalida o cache de uso de memória
-     */
-    private static function invalidateMemoryCache(): void
-    {
-        self::$memoryUsageCache = null;
-        self::$lastDataHash = null;
-    }
-
-    /**
      * Limpa todos os caches incluindo cache de serialização
      */
     public static function clearCache(): void
@@ -659,7 +635,6 @@ class RouteCache
         self::$fastParameterCache = [];
         self::$routeTypeCache = ['static' => [], 'dynamic' => []];
         self::$stats = ['hits' => 0, 'misses' => 0, 'compilations' => 0];
-        self::invalidateMemoryCache();
 
         // Limpa cache de serialização relacionado
         SerializationCache::clearCache();
@@ -687,60 +662,23 @@ class RouteCache
     }
 
     /**
-     * Calcula uso de memória do cache com cache otimizado para melhor performance
+     * Calcula uso de memória do cache sem serialize() — handlers podem ser
+     * Closure, e serialize() lança exceção (SPEC-047). Estimativa por contagem.
      */
     private static function getMemoryUsage(): string
     {
-        // Gera hash dos dados atuais de forma mais eficiente
-        $currentDataHash = md5(
-            count(self::$compiledRoutes) . '|' .
-            count(self::$compiledPatterns) . '|' .
-            count(self::$parameterMappings) . '|' .
-            serialize(array_keys(self::$compiledRoutes))
-        );
+        $entries = count(self::$compiledRoutes)
+            + count(self::$compiledPatterns)
+            + count(self::$parameterMappings);
+        $size = $entries * 256;
 
-        // Se o cache é válido, retorna os dados em cache
-        if (self::$memoryUsageCache !== null && self::$lastDataHash === $currentDataHash) {
-            $formatted = self::$memoryUsageCache['formatted'] ?? '';
-            return is_string($formatted) ? $formatted : '';
-        }
-
-        // Recalcula o uso de memória usando cache de serialização otimizado
-        $objects = [
-            'routes' => self::$compiledRoutes,
-            'patterns' => self::$compiledPatterns,
-            'parameters' => self::$parameterMappings
-        ];
-
-        $cacheKeys = ['route_cache_routes', 'route_cache_patterns', 'route_cache_parameters'];
-        $size = SerializationCache::getTotalSerializedSize(array_values($objects), $cacheKeys);
-
-        $formatted = '';
         if ($size < 1024) {
-            $formatted = $size . ' B';
-        } elseif ($size < 1048576) {
-            $formatted = round($size / 1024, 2) . ' KB';
-        } else {
-            $formatted = round($size / 1048576, 2) . ' MB';
+            return $size . ' B';
         }
-
-        // Calcula tamanhos individuais usando cache
-        $routesSize = SerializationCache::getSerializedSize(self::$compiledRoutes, 'route_cache_routes');
-        $patternsSize = SerializationCache::getSerializedSize(self::$compiledPatterns, 'route_cache_patterns');
-        $parametersSize = SerializationCache::getSerializedSize(self::$parameterMappings, 'route_cache_parameters');
-
-        // Armazena no cache
-        self::$memoryUsageCache = [
-            'raw_size' => $size,
-            'formatted' => $formatted,
-            'routes_memory' => $routesSize,
-            'patterns_memory' => $patternsSize,
-            'parameters_memory' => $parametersSize,
-            'serialization_stats' => SerializationCache::getStats()
-        ];
-        self::$lastDataHash = $currentDataHash;
-
-        return $formatted;
+        if ($size < 1048576) {
+            return round($size / 1024, 2) . ' KB';
+        }
+        return round($size / 1048576, 2) . ' MB';
     }
 
     /**
@@ -777,9 +715,6 @@ class RouteCache
      */
     public static function getDebugInfo(): array
     {
-        // Garante que o cache de memória está atualizado
-        self::getMemoryUsage();
-
         return [
             'cache_size' => [
                 'routes' => count(self::$compiledRoutes),
@@ -788,11 +723,6 @@ class RouteCache
             ],
             'statistics' => self::getStats(),
             'sample_keys' => array_slice(array_keys(self::$compiledRoutes), 0, 10),
-            'memory_details' => [
-                'routes_memory' => self::$memoryUsageCache['routes_memory'] ?? 0,
-                'patterns_memory' => self::$memoryUsageCache['patterns_memory'] ?? 0,
-                'parameters_memory' => self::$memoryUsageCache['parameters_memory'] ?? 0
-            ],
             'constraint_shortcuts' => self::CONSTRAINT_SHORTCUTS
         ];
     }
