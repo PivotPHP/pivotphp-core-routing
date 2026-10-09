@@ -258,6 +258,13 @@ class Router
         }
         $method = strtoupper($method);
 
+        // Parâmetros opcionais (:param?) não são suportados (SPEC-026).
+        if (str_contains($path, '?')) {
+            throw new InvalidArgumentException(
+                "Optional route parameters are not supported (found '?' in '{$path}')"
+            );
+        }
+
         // Validar e resolver o handler usando CallableResolver
         $resolvedHandler = CallableResolver::resolve($handler);
 
