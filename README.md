@@ -39,10 +39,15 @@ $router->get('/users', function($req, $res) {
 
 $router->post('/users', [UserController::class, 'store']);
 
-// Route with parameters
+// Route with parameters — both ':id' and '{id}' syntaxes are supported
 $router->get('/users/:id', function($req, $res) {
     $userId = $req->param('id');
     return $res->json(['user' => ['id' => $userId]]);
+});
+
+$router->get('/books/{isbn}', function($req, $res) {
+    $isbn = $req->param('isbn');
+    return $res->json(['book' => ['isbn' => $isbn]]);
 });
 
 // Route groups with prefix and middleware

@@ -184,6 +184,9 @@ class RouteCache
         // Process regex blocks
         $pattern = self::processRegexBlocks($pattern, $parameters, $position);
 
+        // Process brace-delimited named parameters ({id}, {id<constraint>})
+        $pattern = self::processBraceParameters($pattern, $parameters, $position);
+
         // Process named parameters
         $pattern = self::processNamedParameters($pattern, $parameters, $position);
 
@@ -385,6 +388,34 @@ class RouteCache
                 'type' => 'anonymous'
             ];
         }
+    }
+
+    /**
+     * Process brace-delimited named parameters like {param} or {param<constraint>}.
+     *
+     * Runs after processRegexBlocks() (which already expanded {^...$} regex
+     * blocks), so only simple named parameters remain in braces here. Reuses
+     * processNamedParameter() so both :param and {param} share the same
+     * constraint/shortcut/ReDoS validation logic.
+     *
+     * @param array<int, array<string, mixed>> $parameters
+     */
+    private static function processBraceParameters(
+        ?string $pattern,
+        array &$parameters,
+        int &$position
+    ): ?string {
+        if ($pattern === null) {
+            return '';
+        }
+
+        return preg_replace_callback(
+            '/\{([a-zA-Z_][a-zA-Z0-9_]*)(?:<([^>]+)>)?\}/',
+            function ($matches) use (&$parameters, &$position) {
+                return self::processNamedParameter($matches, $parameters, $position);
+            },
+            $pattern
+        );
     }
 
     /**
