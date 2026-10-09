@@ -81,16 +81,26 @@ class CallableResolver
                 );
             }
 
-            // Verificar se o método é realmente estático
+            // Verificar se o método é estático ou de instância
             $reflection = new \ReflectionMethod($objectOrClass, $method);
-            if (!$reflection->isStatic()) {
-                throw new InvalidArgumentException(
-                    "Method '{$objectOrClass}::{$method}' is not static. Use an instance instead."
-                );
+
+            if ($reflection->isStatic()) {
+                /** @var callable */
+                return [$objectOrClass, $method];
             }
 
-            /** @var callable */
-            return [$objectOrClass, $method];
+            // Método de instância referenciado pelo nome da classe: resolve de
+            // forma lazy (instancia na chamada). Este pacote é standalone e não
+            // possui container de DI; consumidores com DI podem resolver e passar
+            // a instância diretamente ([$instance, 'method']).
+            return static function (...$args) use ($objectOrClass, $method) {
+                $instance = new $objectOrClass();
+
+                /** @var callable $handler */
+                $handler = [$instance, $method];
+
+                return $handler(...$args);
+            };
         }
 
         // Caso 2: Método de instância [$instance, 'method']
