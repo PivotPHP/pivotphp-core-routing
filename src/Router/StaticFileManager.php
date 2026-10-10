@@ -187,12 +187,11 @@ class StaticFileManager
      */
     private static function createFileHandler(string $routePrefix): callable
     {
-        return function (
-            ServerRequestInterface $req,
-            ResponseInterface $res
-        ) use ($routePrefix): ResponseInterface {
+        return static function ($req, $res) use ($routePrefix): ResponseInterface {
             // Extrai filepath do path da requisição removendo o prefixo
-            $requestPath = $req->getUri()->getPath();
+            $requestPath = $req instanceof ServerRequestInterface
+                ? $req->getUri()->getPath()
+                : (string) $req->path();
 
             // Remove o prefixo da rota para obter o caminho relativo do arquivo
             if (!str_starts_with($requestPath, $routePrefix)) {
@@ -215,8 +214,27 @@ class StaticFileManager
             }
 
             // Serve o arquivo
-            return self::serveFile($fileInfo, $res);
+            return self::serveFile($fileInfo, self::toPsr7($res));
         };
+    }
+
+    /**
+     * Normaliza para uma resposta PSR-7 (aceita PSR-7 ou uma fachada com psr7()).
+     */
+    private static function toPsr7(mixed $res): ResponseInterface
+    {
+        if ($res instanceof ResponseInterface) {
+            return $res;
+        }
+
+        if (is_object($res) && method_exists($res, 'psr7')) {
+            $inner = $res->psr7();
+            if ($inner instanceof ResponseInterface) {
+                return $inner;
+            }
+        }
+
+        throw new \InvalidArgumentException('Static file handler expects a PSR-7 response or a facade with psr7().');
     }
 
     /**

@@ -147,9 +147,8 @@ class SimpleStaticFileManager
      */
     private static function createFileHandler(array $fileInfo): callable
     {
-        return function (ServerRequestInterface $req, ResponseInterface $res) use ($fileInfo) {
-            // Suprime warning sobre $req não usado - pode ser usado em funcionalidades futuras
-            unset($req);
+        return static function ($req, $res) use ($fileInfo) {
+            $response = self::toPsr7($res);
             self::$stats['total_hits']++;
 
             // Lê conteúdo do arquivo
@@ -159,30 +158,48 @@ class SimpleStaticFileManager
             }
 
             // Headers de resposta
-            $res = $res->withHeader('Content-Type', $fileInfo['mime'])
-                      ->withHeader('Content-Length', (string)strlen($content));
+            $response = $response->withHeader('Content-Type', $fileInfo['mime'])
+                      ->withHeader('Content-Length', (string) strlen($content));
 
             // Headers de cache
             $cacheMaxAge = self::$config['cache_control_max_age'];
             if (is_numeric($cacheMaxAge) && $cacheMaxAge > 0) {
-                $maxAge = (int)$cacheMaxAge;
-                $res = $res->withHeader('Cache-Control', "public, max-age={$maxAge}");
+                $maxAge = (int) $cacheMaxAge;
+                $response = $response->withHeader('Cache-Control', "public, max-age={$maxAge}");
             }
 
             // ETag baseado no arquivo
             $filemtime = filemtime($fileInfo['path']);
-            $etag = md5($fileInfo['path'] . ($filemtime !== false ? (string)$filemtime : '0') . $fileInfo['size']);
-            $res = $res->withHeader('ETag', '"' . $etag . '"');
+            $etag = md5($fileInfo['path'] . ($filemtime !== false ? (string) $filemtime : '0') . $fileInfo['size']);
+            $response = $response->withHeader('ETag', '"' . $etag . '"');
 
             // Last-Modified
-            $filemtime = filemtime($fileInfo['path']);
             $lastModified = gmdate('D, d M Y H:i:s', $filemtime !== false ? $filemtime : 0) . ' GMT';
-            $res = $res->withHeader('Last-Modified', $lastModified);
+            $response = $response->withHeader('Last-Modified', $lastModified);
 
-            // Define o body no stream já fornecido pela implementação PSR-7 e retorna
-            $res->getBody()->write($content);
-            return $res;
+            // Define o body no stream do response PSR-7 (mutável) e retorna
+            $response->getBody()->write($content);
+            return $response;
         };
+    }
+
+    /**
+     * Normaliza para uma resposta PSR-7 (aceita PSR-7 ou uma fachada com psr7()).
+     */
+    private static function toPsr7(mixed $res): ResponseInterface
+    {
+        if ($res instanceof ResponseInterface) {
+            return $res;
+        }
+
+        if (is_object($res) && method_exists($res, 'psr7')) {
+            $inner = $res->psr7();
+            if ($inner instanceof ResponseInterface) {
+                return $inner;
+            }
+        }
+
+        throw new \InvalidArgumentException('Static file handler expects a PSR-7 response or a facade with psr7().');
     }
 
     /**

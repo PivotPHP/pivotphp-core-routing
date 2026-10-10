@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-10-10
+
+### Added
+
+- `Router::allowedMethods(string $path): array` — métodos HTTP com ao menos uma rota casando
+  com o path (inclui `HEAD` quando houver `GET`), para responder `405` com `Allow` (SPEC-072).
+
+### Fixed
+
+- `Router::identify()` com método `HEAD` cai para a rota `GET` quando não há rota `HEAD`
+  explícita (SPEC-072).
+- `StaticFileManager`/`SimpleStaticFileManager`: os handlers aceitam PSR-7 **ou** a fachada
+  `PivotPHP\Http\ExpressResponse` (normalizam via `psr7()`), servindo o conteúdo corretamente
+  sob a pipeline do `pivotphp/http` (SPEC-061).
+
 ## [2.0.0] - 2026-10-10
 
 ### Removed
