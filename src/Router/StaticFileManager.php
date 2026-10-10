@@ -4,94 +4,57 @@ declare(strict_types=1);
 
 namespace PivotPHP\Routing\Router;
 
-use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
 /**
- * Static File Manager (Façade + Advanced Features)
+ * Servidor de arquivos estáticos.
  *
- * Implementação avançada para servir arquivos estáticos com cache e otimizações.
- * Funcionalidade similar ao express.static() do Node.js.
- *
- * ESTRATÉGIA: Resolve arquivos dinamicamente com cache inteligente.
- * - Usa padrões de rota com wildcards
- * - Cache inteligente de metadados de arquivos
- * - Funcionalidades avançadas: ETag, compression, security
- * - Suporte a index files (index.html, index.htm)
- *
- * USO RECOMENDADO:
- * - Projetos médios/grandes com centenas de arquivos estáticos
- * - Quando você quer funcionalidades express.static()
- * - SPAs com assets e bundle management
- * - Produção com cache e performance otimizada
- *
- * ARQUITETURA:
- * - registerDirectory() → Delega para SimpleStaticFileManager
- * - register() → Mantém compatibilidade com método antigo
- * - Funcionalidades extras: listFiles(), generateRouteMap(), cache management
- *
- * @package PivotPHP\Routing\Router
- * @since 1.1.3
+ * Estratégia única: **registra cada arquivo do diretório como uma rota**
+ * (`Router::add('GET', ...)`) — sem wildcards/regex. Uma implementação só
+ * (consolidação de `SimpleStaticFileManager` — SPEC-095).
  */
 class StaticFileManager
 {
     /**
-     * Cache de arquivos mapeados
-     * @var array<string, array{path: string, mime: string, size: int, modified: int}>
+     * Arquivos registrados: rota => metadados.
+     *
+     * @var array<string, array{path: string, mime: string, size: int}>
      */
-    private static array $fileCache = [];
+    private static array $registeredFiles = [];
 
     /**
-     * Pastas registradas
+     * Diretórios registrados: prefixo => caminho físico + opções.
+     *
      * @var array<string, array{physical_path: string, options: array<string, mixed>}>
      */
     private static array $registeredPaths = [];
 
     /**
-     * Estatísticas de uso
-     * @var array<string, mixed>
+     * @var array<string, int>
      */
     private static array $stats = [
         'registered_paths' => 0,
-        'cached_files' => 0,
+        'registered_files' => 0,
         'total_hits' => 0,
-        'cache_hits' => 0,
-        'cache_misses' => 0,
-        'memory_usage_bytes' => 0
+        'memory_usage_bytes' => 0,
     ];
 
     /**
-     * Configurações
-     * @var array{
-     *     enable_cache: bool,
-     *     max_file_size: int,
-     *     max_cache_entries: int,
-     *     allowed_extensions: array<int, string>,
-     *     security_check: bool,
-     *     send_etag: bool,
-     *     send_last_modified: bool,
-     *     cache_control_max_age: int
-     * }
+     * @var array<string, mixed>
      */
     private static array $config = [
-        'enable_cache' => true,
-        'max_file_size' => 10485760,    // 10MB máximo
-        'max_cache_entries' => 10000,   // Máximo de arquivos no cache
+        'max_file_size' => 10485760, // 10MB
         'allowed_extensions' => [
             'js', 'css', 'html', 'htm', 'json', 'xml',
             'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico',
             'woff', 'woff2', 'ttf', 'eot',
-            'pdf', 'txt', 'md'
+            'pdf', 'txt', 'md',
         ],
-        'security_check' => true,       // Previne path traversal
-        'send_etag' => true,           // Headers de cache
+        'cache_control_max_age' => 86400, // 24 horas
+        'send_etag' => true,
         'send_last_modified' => true,
-        'cache_control_max_age' => 86400 // 24 horas
     ];
 
-    /**
-     * MIME types para arquivos comuns
-     */
     private const MIME_TYPES = [
         'js' => 'application/javascript',
         'css' => 'text/css',
@@ -111,11 +74,12 @@ class StaticFileManager
         'eot' => 'application/vnd.ms-fontobject',
         'pdf' => 'application/pdf',
         'txt' => 'text/plain',
-        'md' => 'text/markdown'
+        'md' => 'text/markdown',
     ];
 
     /**
-     * Registra um diretório inteiro, criando rotas individuais para cada arquivo
+     * Registra um diretório inteiro, criando uma rota para cada arquivo.
+     *
      * @param array<string, mixed> $options
      */
     public static function registerDirectory(
@@ -123,103 +87,109 @@ class StaticFileManager
         string $physicalPath,
         array $options = []
     ): void {
-        // Delega para o SimpleStaticFileManager
-        SimpleStaticFileManager::registerDirectory($routePrefix, $physicalPath, $options);
-    }
+        if (!is_dir($physicalPath)) {
+            throw new \InvalidArgumentException("Directory does not exist: {$physicalPath}");
+        }
 
-    /**
-     * Registra uma pasta para servir arquivos estáticos (método antigo - mantido para compatibilidade)
-     *
-     * @param string $routePrefix Prefixo da rota (ex: '/public/js')
-     * @param string $physicalPath Pasta física (ex: 'src/bundle/js')
-     * @param array<string, mixed> $options Opções adicionais
-     * @return callable(ServerRequestInterface, ResponseInterface): ResponseInterface
-     * @deprecated Use registerDirectory() no lugar
-     */
-    public static function register(
-        string $routePrefix,
-        string $physicalPath,
-        array $options = []
-    ): callable {
-        // Normaliza caminhos
         $routePrefix = '/' . trim($routePrefix, '/');
         $physicalPath = rtrim($physicalPath, '/\\');
-
-        // Valida que pasta existe
-        if (!is_dir($physicalPath)) {
-            throw new \InvalidArgumentException("Physical path does not exist: {$physicalPath}");
-        }
-
-        // Valida que pasta é legível
-        if (!is_readable($physicalPath)) {
-            throw new \InvalidArgumentException("Physical path is not readable: {$physicalPath}");
-        }
-
-        // Registra o mapeamento
         $realPath = realpath($physicalPath);
-        if ($realPath === false) {
-            throw new \InvalidArgumentException("Cannot resolve real path for: {$physicalPath}");
-        }
 
         self::$registeredPaths[$routePrefix] = [
-            'physical_path' => $realPath,
-            'options' => array_merge(
-                [
-                    'index' => ['index.html', 'index.htm'],
-                    'dotfiles' => 'ignore',  // ignore, allow, deny
-                    'extensions' => false,   // auto-append extensions
-                    'fallthrough' => true,   // continue to next middleware on miss
-                    'redirect' => true       // redirect trailing slash
-                ],
-                $options
-            )
+            'physical_path' => $realPath !== false ? $realPath : $physicalPath,
+            'options' => $options,
         ];
-
         self::$stats['registered_paths']++;
 
-        // Retorna handler que resolve arquivos
-        return self::createFileHandler($routePrefix);
+        foreach (self::scanDirectory($physicalPath) as $file) {
+            $relativePath = str_replace($physicalPath, '', $file['path']);
+            $relativePath = str_replace('\\', '/', $relativePath);
+
+            self::registerSingleFile($routePrefix . $relativePath, $file);
+        }
     }
 
     /**
-     * Cria handler otimizado para servir arquivos
-     * @return callable(ServerRequestInterface, ResponseInterface): ResponseInterface
+     * @deprecated Use {@see self::registerDirectory()} (consolidação — SPEC-095). Mantido
+     * apenas para compatibilidade de assinatura; não retorna mais um handler de prefixo.
+     *
+     * @param array<string, mixed> $options
+     * @return callable
      */
-    private static function createFileHandler(string $routePrefix): callable
+    public static function register(string $routePrefix, string $physicalPath, array $options = []): callable
     {
-        return static function ($req, $res) use ($routePrefix): ResponseInterface {
-            // Extrai filepath do path da requisição removendo o prefixo
-            $requestPath = $req instanceof ServerRequestInterface
-                ? $req->getUri()->getPath()
-                : (string) $req->path();
+        self::registerDirectory($routePrefix, $physicalPath, $options);
 
-            // Remove o prefixo da rota para obter o caminho relativo do arquivo
-            if (!str_starts_with($requestPath, $routePrefix)) {
-                throw new \RuntimeException('Path does not match route prefix', 404);
+        return static fn ($req, $res) => $res;
+    }
+
+    /**
+     * @param array{path: string, size: int, mime: string, extension: string} $fileInfo
+     */
+    private static function registerSingleFile(string $route, array $fileInfo): void
+    {
+        if (isset(self::$registeredFiles[$route])) {
+            return;
+        }
+
+        Router::add('GET', $route, self::createFileHandler($fileInfo));
+
+        self::$registeredFiles[$route] = [
+            'path' => $fileInfo['path'],
+            'mime' => $fileInfo['mime'],
+            'size' => $fileInfo['size'],
+        ];
+
+        self::$stats['registered_files']++;
+        self::$stats['memory_usage_bytes'] += $fileInfo['size'];
+    }
+
+    /**
+     * @param array{path: string, size: int, mime: string, extension: string} $fileInfo
+     * @return callable
+     */
+    private static function createFileHandler(array $fileInfo): callable
+    {
+        return static function ($req, $res) use ($fileInfo) {
+            $response = self::toPsr7($res);
+            self::$stats['total_hits']++;
+
+            $content = file_get_contents($fileInfo['path']);
+            if ($content === false) {
+                throw new \RuntimeException('Cannot read file: ' . $fileInfo['path']);
             }
 
-            $relativePath = substr($requestPath, strlen($routePrefix));
-            if ($relativePath === '' || $relativePath === '/') {
-                // Se não há filepath, tenta arquivos index
-                $relativePath = '/';
-            } else {
-                $relativePath = '/' . ltrim($relativePath, '/');
+            $response = $response
+                ->withHeader('Content-Type', $fileInfo['mime'])
+                ->withHeader('Content-Length', (string) strlen($content));
+
+            $cacheMaxAge = self::$config['cache_control_max_age'];
+            if (is_numeric($cacheMaxAge) && $cacheMaxAge > 0) {
+                $maxAge = (int) $cacheMaxAge;
+                $response = $response->withHeader('Cache-Control', "public, max-age={$maxAge}");
             }
 
-            // Resolve arquivo físico
-            $fileInfo = self::resolveFile($routePrefix, $relativePath);
+            $filemtime = filemtime($fileInfo['path']);
 
-            if ($fileInfo === null) {
-                throw new \RuntimeException('File not found', 404);
+            if (self::$config['send_etag'] === true) {
+                $etag = md5($fileInfo['path'] . ($filemtime !== false ? (string) $filemtime : '0') . $fileInfo['size']);
+                $response = $response->withHeader('ETag', '"' . $etag . '"');
             }
 
-            // Serve o arquivo
-            return self::serveFile($fileInfo, self::toPsr7($res));
+            if (self::$config['send_last_modified'] === true) {
+                $lastModified = gmdate('D, d M Y H:i:s', $filemtime !== false ? $filemtime : 0) . ' GMT';
+                $response = $response->withHeader('Last-Modified', $lastModified);
+            }
+
+            // Escreve no stream do response PSR-7 (mutável) e retorna
+            $response->getBody()->write($content);
+
+            return $response;
         };
     }
 
     /**
-     * Normaliza para uma resposta PSR-7 (aceita PSR-7 ou uma fachada com psr7()).
+     * Normaliza para uma resposta PSR-7 (aceita PSR-7 ou uma fachada com `psr7()`).
      */
     private static function toPsr7(mixed $res): ResponseInterface
     {
@@ -238,175 +208,64 @@ class StaticFileManager
     }
 
     /**
-     * Resolve arquivo físico baseado na rota
-     * @return array{path: string, mime: string, size: int, modified: int, extension: string}|null
+     * @return array<int, array{path: string, size: int, mime: string, extension: string}>
      */
-    private static function resolveFile(string $routePrefix, string $relativePath): ?array
+    private static function scanDirectory(string $path): array
     {
-        if (!isset(self::$registeredPaths[$routePrefix])) {
-            return null;
-        }
+        $files = [];
 
-        $config = self::$registeredPaths[$routePrefix];
-        $physicalPath = $config['physical_path'];
-        $options = $config['options'];
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST
+        );
 
-        // Security check: previne path traversal
-        if (self::$config['security_check'] && self::containsPathTraversal($relativePath)) {
-            return null;
-        }
+        $allowedExtensions = self::$config['allowed_extensions'];
+        $maxFileSizeConfig = self::$config['max_file_size'];
+        $maxFileSize = is_numeric($maxFileSizeConfig) ? (int) $maxFileSizeConfig : 10485760;
 
-        // Constrói caminho físico
-        $filePath = $physicalPath . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
-
-        // Se é diretório, procura index files
-        if (is_dir($filePath) && isset($options['index']) && is_array($options['index'])) {
-            foreach ($options['index'] as $indexFile) {
-                $indexPath = $filePath . DIRECTORY_SEPARATOR . $indexFile;
-                if (file_exists($indexPath) && is_readable($indexPath)) {
-                    $filePath = $indexPath;
-                    break;
-                }
+        foreach ($iterator as $file) {
+            if (!$file instanceof \SplFileInfo || !$file->isFile()) {
+                continue;
             }
 
-            // Se ainda é diretório após busca de index, retorna null
-            if (is_dir($filePath)) {
-                return null;
+            $extension = strtolower($file->getExtension());
+
+            if (!is_array($allowedExtensions) || !in_array($extension, $allowedExtensions, true)) {
+                continue;
             }
+
+            if ($file->getSize() > $maxFileSize) {
+                continue;
+            }
+
+            $files[] = [
+                'path' => $file->getPathname(),
+                'size' => $file->getSize(),
+                'mime' => self::MIME_TYPES[$extension] ?? 'application/octet-stream',
+                'extension' => $extension,
+            ];
         }
 
-        // Verifica se arquivo existe e é legível
-        if (!file_exists($filePath) || !is_readable($filePath)) {
-            return null;
-        }
-
-        // Verifica extensão permitida
-        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-        if (!in_array($extension, self::$config['allowed_extensions'], true)) {
-            return null;
-        }
-
-        // Verifica tamanho do arquivo
-        $fileSize = filesize($filePath);
-        if ($fileSize === false) {
-            return null; // Erro ao ler tamanho do arquivo
-        }
-        if ($fileSize > self::$config['max_file_size']) {
-            return null;
-        }
-
-        // Verifica timestamp de modificação
-        $fileModified = filemtime($filePath);
-        if ($fileModified === false) {
-            return null; // Erro ao ler timestamp do arquivo
-        }
-
-        // Determina MIME type
-        $mimeType = self::MIME_TYPES[$extension] ?? 'application/octet-stream';
-
-        return [
-            'path' => $filePath,
-            'mime' => $mimeType,
-            'size' => $fileSize,
-            'modified' => $fileModified,
-            'extension' => $extension
-        ];
+        return $files;
     }
 
     /**
-     * Serve arquivo com headers otimizados
-     * @param array{path: string, mime: string, size: int, modified: int, extension: string} $fileInfo
-     */
-    private static function serveFile(
-        array $fileInfo,
-        ResponseInterface $res
-    ): ResponseInterface {
-        self::$stats['total_hits']++;
-
-        // Headers de cache
-        $res = $res->withHeader('Content-Type', $fileInfo['mime'])
-                  ->withHeader('Content-Length', (string)$fileInfo['size']);
-
-        if (self::$config['send_etag']) {
-            $etag = md5($fileInfo['path'] . $fileInfo['modified'] . $fileInfo['size']);
-            $res = $res->withHeader('ETag', '"' . $etag . '"');
-
-            // Verifica If-None-Match (simplificado por enquanto)
-            // $ifNoneMatch = $req->getHeader('If-None-Match');
-            // if ($ifNoneMatch && trim($ifNoneMatch, '"') === $etag) {
-            //     return $res->status(304); // Not Modified
-            // }
-        }
-
-        if (self::$config['send_last_modified']) {
-            $lastModified = gmdate('D, d M Y H:i:s', $fileInfo['modified']) . ' GMT';
-            $res = $res->withHeader('Last-Modified', $lastModified);
-
-            // Verifica If-Modified-Since (simplificado por enquanto)
-            // $ifModifiedSince = $req->getHeader('If-Modified-Since');
-            // if ($ifModifiedSince && strtotime($ifModifiedSince) >= $fileInfo['modified']) {
-            //     return $res->status(304); // Not Modified
-            // }
-        }
-
-        // Cache-Control
-        if (self::$config['cache_control_max_age'] > 0) {
-            $maxAge = (int) self::$config['cache_control_max_age'];
-            $res = $res->withHeader('Cache-Control', "public, max-age=" . (string) $maxAge);
-        }
-
-        // Lê e envia conteúdo do arquivo
-        $content = file_get_contents($fileInfo['path']);
-        if ($content === false) {
-            throw new \RuntimeException('Unable to read file: ' . $fileInfo['path'], 500);
-        }
-
-        // Define o body no stream já fornecido pela implementação PSR-7 e retorna
-        $res->getBody()->write($content);
-        return $res;
-    }
-
-    /**
-     * Verifica se path contém tentativas de path traversal
-     */
-    private static function containsPathTraversal(string $path): bool
-    {
-        return strpos($path, '..') !== false ||
-               strpos($path, '\\') !== false ||
-               strpos($path, '\0') !== false;
-    }
-
-    /**
-     * Configura o manager
      * @param array<string, mixed> $config
      */
     public static function configure(array $config): void
     {
-        self::$config = array_merge(self::$config, $config); // @phpstan-ignore-line
+        self::$config = array_merge(self::$config, $config);
     }
 
     /**
-     * Obtém estatísticas
-     * @return array<string, mixed>
+     * @return array<string, int>
      */
     public static function getStats(): array
     {
-        $memoryUsage = 0;
-        foreach (self::$fileCache as $file) {
-            $memoryUsage += strlen(serialize($file));
-        }
-
-        return array_merge(
-            self::$stats,
-            [
-                'memory_usage_bytes' => $memoryUsage,
-                'memory_usage_mb' => round($memoryUsage / 1024 / 1024, 3)
-            ]
-        );
+        return self::$stats;
     }
 
     /**
-     * Lista caminhos registrados
      * @return array<int, string>
      */
     public static function getRegisteredPaths(): array
@@ -415,7 +274,6 @@ class StaticFileManager
     }
 
     /**
-     * Obtém informações de um caminho registrado
      * @return array{physical_path: string, options: array<string, mixed>}|null
      */
     public static function getPathInfo(string $routePrefix): ?array
@@ -424,18 +282,16 @@ class StaticFileManager
     }
 
     /**
-     * Limpa cache
+     * @return array<int, string>
      */
-    public static function clearCache(): void
+    public static function getRegisteredFiles(): array
     {
-        self::$fileCache = [];
-        self::$stats['cached_files'] = 0;
-        self::$stats['cache_hits'] = 0;
-        self::$stats['cache_misses'] = 0;
+        return array_keys(self::$registeredFiles);
     }
 
     /**
-     * Lista arquivos disponíveis em uma pasta registrada
+     * Lista arquivos disponíveis num diretório registrado.
+     *
      * @return array<int, array{path: string, physical_path: string, size: int, modified: int, extension: string, mime: string}>
      */
     public static function listFiles(
@@ -447,8 +303,7 @@ class StaticFileManager
             return [];
         }
 
-        $config = self::$registeredPaths[$routePrefix];
-        $basePath = $config['physical_path'];
+        $basePath = self::$registeredPaths[$routePrefix]['physical_path'];
         $searchPath = $basePath . DIRECTORY_SEPARATOR . ltrim($subPath, '/\\');
 
         if (!is_dir($searchPath) || $maxDepth <= 0) {
@@ -463,44 +318,67 @@ class StaticFileManager
         );
         $iterator->setMaxDepth($maxDepth);
 
+        $routePrefix = '/' . trim($routePrefix, '/');
+
         foreach ($iterator as $file) {
-            if ($file instanceof \SplFileInfo && $file->isFile()) {
-                $extension = strtolower($file->getExtension());
-                if (in_array($extension, self::$config['allowed_extensions'], true)) {
-                    $relativePath = str_replace($basePath, '', $file->getPathname());
-                    $relativePath = str_replace('\\', '/', $relativePath);
-                    $files[] = [
-                        'path' => $routePrefix . $relativePath,
-                        'physical_path' => $file->getPathname(),
-                        'size' => $file->getSize(),
-                        'modified' => $file->getMTime(),
-                        'extension' => $extension,
-                        'mime' => self::MIME_TYPES[$extension] ?? 'application/octet-stream'
-                    ];
-                }
+            if (!$file instanceof \SplFileInfo || !$file->isFile()) {
+                continue;
             }
+
+            $extension = strtolower($file->getExtension());
+            $allowed = self::$config['allowed_extensions'];
+            if (!is_array($allowed) || !in_array($extension, $allowed, true)) {
+                continue;
+            }
+
+            $relativePath = str_replace([$basePath, '\\'], ['', '/'], $file->getPathname());
+
+            $files[] = [
+                'path' => $routePrefix . $relativePath,
+                'physical_path' => $file->getPathname(),
+                'size' => $file->getSize(),
+                'modified' => $file->getMTime(),
+                'extension' => $extension,
+                'mime' => self::MIME_TYPES[$extension] ?? 'application/octet-stream',
+            ];
         }
 
         return $files;
     }
 
     /**
-     * Gera mapa de todas as rotas de arquivos estáticos
+     * Mapa de todas as rotas de arquivos estáticos.
+     *
      * @return array<string, array{physical_path: string, file_count: int, files: array<int, array{path: string, physical_path: string, size: int, modified: int, extension: string, mime: string}>}>
      */
     public static function generateRouteMap(): array
     {
         $map = [];
 
-        foreach (self::$registeredPaths as $routePrefix => $config) {
+        foreach (self::$registeredPaths as $routePrefix => $info) {
             $files = self::listFiles($routePrefix);
             $map[$routePrefix] = [
-                'physical_path' => $config['physical_path'],
+                'physical_path' => $info['physical_path'],
                 'file_count' => count($files),
-                'files' => $files
+                'files' => $files,
             ];
         }
 
         return $map;
+    }
+
+    /**
+     * Limpa o estado (arquivos e estatísticas).
+     */
+    public static function clearCache(): void
+    {
+        self::$registeredFiles = [];
+        self::$registeredPaths = [];
+        self::$stats = [
+            'registered_paths' => 0,
+            'registered_files' => 0,
+            'total_hits' => 0,
+            'memory_usage_bytes' => 0,
+        ];
     }
 }

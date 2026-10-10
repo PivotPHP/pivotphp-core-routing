@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace PivotPHP\Tests\Routing;
 
 use PHPUnit\Framework\TestCase;
+use PivotPHP\Routing\Router\Router;
+use PivotPHP\Routing\Router\SimpleStaticFileManager;
 use PivotPHP\Routing\Router\StaticFileManager;
 
 class StaticFileManagerTest extends TestCase
@@ -13,18 +15,15 @@ class StaticFileManagerTest extends TestCase
 
     protected function setUp(): void
     {
+        Router::clear();
+        StaticFileManager::clearCache();
+
         $this->testDir = sys_get_temp_dir() . '/pivotphp-static-test-' . uniqid();
         mkdir($this->testDir, 0777, true);
-
-        // Create test files
-        file_put_contents($this->testDir . '/test.txt', 'Hello World');
-        file_put_contents($this->testDir . '/test.html', '<html><body>Test</body></html>');
-        file_put_contents($this->testDir . '/test.css', 'body { color: red; }');
-        file_put_contents($this->testDir . '/test.js', 'console.log("test");');
-
-        // Create subdirectory
-        mkdir($this->testDir . '/subdir', 0777, true);
-        file_put_contents($this->testDir . '/subdir/nested.txt', 'Nested file');
+        file_put_contents($this->testDir . '/app.js', 'console.log(1);');
+        file_put_contents($this->testDir . '/site.css', 'body{}');
+        mkdir($this->testDir . '/sub', 0777, true);
+        file_put_contents($this->testDir . '/sub/nested.txt', 'nested');
     }
 
     protected function tearDown(): void
@@ -38,234 +37,92 @@ class StaticFileManagerTest extends TestCase
             return;
         }
 
-        $files = array_diff(scandir($dir), ['.', '..']);
-        foreach ($files as $file) {
+        foreach (array_diff(scandir($dir), ['.', '..']) as $file) {
             $path = $dir . '/' . $file;
-            if (is_dir($path)) {
-                $this->deleteDirectory($path);
-            } else {
-                unlink($path);
-            }
+            is_dir($path) ? $this->deleteDirectory($path) : unlink($path);
         }
+
         rmdir($dir);
     }
 
-    public function testFileExists(): void
+    public function testRegistersEachFileAsRoute(): void
     {
-        // Note: fileExists() is not a public method in StaticFileManager
-        // This test verifies the actual file system setup instead
-        $this->assertTrue(file_exists($this->testDir . '/test.txt'));
-        $this->assertTrue(file_exists($this->testDir . '/test.html'));
-        $this->assertFalse(file_exists($this->testDir . '/nonexistent.txt'));
+        StaticFileManager::registerDirectory('/assets', $this->testDir);
+
+        $files = StaticFileManager::getRegisteredFiles();
+        $this->assertContains('/assets/app.js', $files);
+        $this->assertContains('/assets/site.css', $files);
+        $this->assertContains('/assets/sub/nested.txt', $files);
+
+        $this->assertNotNull(Router::identify('GET', '/assets/app.js'));
     }
 
-    public function testGetFile(): void
+    public function testThrowsWhenDirectoryMissing(): void
     {
-        // getFile() is not a public method in StaticFileManager
-        // This test verifies file contents directly
-        $content = file_get_contents($this->testDir . '/test.txt');
-        $this->assertEquals('Hello World', $content);
-
-        $htmlContent = file_get_contents($this->testDir . '/test.html');
-        $this->assertEquals('<html><body>Test</body></html>', $htmlContent);
+        $this->expectException(\InvalidArgumentException::class);
+        StaticFileManager::registerDirectory('/assets', '/does/not/exist');
     }
 
-    public function testGetNonExistentFile(): void
+    public function testRegisteredPathsAndPathInfo(): void
     {
-        // getFile() is not a public method in StaticFileManager
-        // This test verifies non-existent file behavior
-        $content = @file_get_contents($this->testDir . '/nonexistent.txt');
-        $this->assertFalse($content);
+        StaticFileManager::registerDirectory('/assets', $this->testDir);
+
+        $this->assertContains('/assets', StaticFileManager::getRegisteredPaths());
+
+        $info = StaticFileManager::getPathInfo('/assets');
+        $this->assertIsArray($info);
+        $this->assertArrayHasKey('physical_path', $info);
+        $this->assertArrayHasKey('options', $info);
+
+        $this->assertNull(StaticFileManager::getPathInfo('/nope'));
     }
 
-    public function testGetFileInfo(): void
+    public function testStats(): void
     {
-        // getFileInfo() is not a public method in StaticFileManager
-        // This test verifies file system information directly
-        $filePath = $this->testDir . '/test.txt';
-        $this->assertEquals(11, filesize($filePath)); // "Hello World" = 11 chars
-        $this->assertIsInt(filemtime($filePath));
-        $this->assertTrue(is_readable($filePath));
-    }
+        StaticFileManager::registerDirectory('/assets', $this->testDir);
 
-    public function testMimeTypeDetection(): void
-    {
-        // getMimeType() is not a public method in StaticFileManager
-        // This test verifies file extension to MIME type mapping logic
-        $this->assertEquals('txt', pathinfo($this->testDir . '/test.txt', PATHINFO_EXTENSION));
-        $this->assertEquals('html', pathinfo($this->testDir . '/test.html', PATHINFO_EXTENSION));
-        $this->assertEquals('css', pathinfo($this->testDir . '/test.css', PATHINFO_EXTENSION));
-        $this->assertEquals('js', pathinfo($this->testDir . '/test.js', PATHINFO_EXTENSION));
-    }
-
-    public function testRegisterMethod(): void
-    {
-        // Test the actual public API method register()
-        $handler = StaticFileManager::register('/public', $this->testDir);
-
-        $this->assertIsCallable($handler);
-
-        // Note: Full request/response testing requires pivotphp-core integration
-        // This test only verifies that register() returns a callable handler
-    }
-
-    public function testGetRegisteredPaths(): void
-    {
-        // Test the public getRegisteredPaths() method
-        $paths = StaticFileManager::getRegisteredPaths();
-        $this->assertIsArray($paths);
-
-        // Register a path and verify it appears
-        try {
-            StaticFileManager::register('/test', $this->testDir);
-            $paths = StaticFileManager::getRegisteredPaths();
-            $this->assertContains('/test', $paths);
-        } catch (\Exception $e) {
-            // Expected if path resolution fails
-            $this->assertStringContains('Cannot resolve real path', $e->getMessage());
-        }
-    }
-
-    public function testNestedFile(): void
-    {
-        // Test nested file directly since fileExists() and getFile() are not public
-        $this->assertTrue(file_exists($this->testDir . '/subdir/nested.txt'));
-        $content = file_get_contents($this->testDir . '/subdir/nested.txt');
-        $this->assertEquals('Nested file', $content);
-    }
-
-    public function testPathTraversalSecurity(): void
-    {
-        // Test that path traversal patterns are detected
-        $traversalPatterns = [
-            '../../../etc/passwd',
-            '..\\..\\..\\windows\\system32',
-        ];
-
-        $absolutePatterns = [
-            '/etc/passwd',
-            '\\windows\\system32'
-        ];
-
-        // Test traversal patterns (should contain ..)
-        foreach ($traversalPatterns as $pattern) {
-            $containsDotDot = strpos($pattern, '..') !== false;
-            $this->assertTrue($containsDotDot, "Pattern '{$pattern}' should contain '..' for traversal");
-        }
-
-        // Test absolute patterns (should start with / or \\)
-        foreach ($absolutePatterns as $pattern) {
-            $isAbsolute = $pattern[0] === '/' || $pattern[0] === '\\';
-            $this->assertTrue($isAbsolute, "Pattern '{$pattern}' should be absolute path");
-        }
-
-        // Test that our test files exist (sanity check)
-        $this->assertTrue(file_exists($this->testDir . '/test.txt'));
-    }
-
-    public function testGetStats(): void
-    {
-        // Test the public getStats() method
         $stats = StaticFileManager::getStats();
-
-        $this->assertIsArray($stats);
-        $this->assertArrayHasKey('registered_paths', $stats);
-        $this->assertArrayHasKey('cached_files', $stats);
-        $this->assertArrayHasKey('total_hits', $stats);
-        $this->assertArrayHasKey('cache_hits', $stats);
-        $this->assertArrayHasKey('cache_misses', $stats);
-        $this->assertArrayHasKey('memory_usage_bytes', $stats);
+        $this->assertSame(1, $stats['registered_paths']);
+        $this->assertGreaterThanOrEqual(3, $stats['registered_files']);
     }
 
-    public function testListFiles(): void
+    public function testListFilesAndRouteMap(): void
     {
-        // Test the public listFiles() method
-        $files = StaticFileManager::listFiles('/test');
-        $this->assertIsArray($files);
+        StaticFileManager::registerDirectory('/assets', $this->testDir);
 
-        // Try registering a path first
-        try {
-            StaticFileManager::register('/test', $this->testDir);
-            $files = StaticFileManager::listFiles('/test');
-            $this->assertIsArray($files);
-        } catch (\Exception $e) {
-            // Expected if path resolution fails
-            $this->assertStringContains('Cannot resolve real path', $e->getMessage());
-        }
+        $this->assertNotEmpty(StaticFileManager::listFiles('/assets'));
+        $this->assertSame([], StaticFileManager::listFiles('/nope'));
+
+        $map = StaticFileManager::generateRouteMap();
+        $this->assertArrayHasKey('/assets', $map);
+        $this->assertSame(3, $map['/assets']['file_count']);
     }
 
-    public function testGenerateRouteMap(): void
+    public function testClearCacheResetsState(): void
     {
-        // Test the public generateRouteMap() method
-        $routeMap = StaticFileManager::generateRouteMap();
-        $this->assertIsArray($routeMap);
-
-        // Try registering a path first
-        try {
-            StaticFileManager::register('/test', $this->testDir);
-            $routeMap = StaticFileManager::generateRouteMap();
-            $this->assertIsArray($routeMap);
-        } catch (\Exception $e) {
-            // Expected if path resolution fails
-            $this->assertStringContains('Cannot resolve real path', $e->getMessage());
-        }
-    }
-
-    public function testClearCache(): void
-    {
-        // Test the public clearCache() method
-        $initialStats = StaticFileManager::getStats();
-
+        StaticFileManager::registerDirectory('/assets', $this->testDir);
         StaticFileManager::clearCache();
 
-        $clearedStats = StaticFileManager::getStats();
-        $this->assertIsArray($clearedStats);
-
-        // Cache-related stats should be reset
-        $this->assertEquals(0, $clearedStats['cached_files']);
-        $this->assertEquals(0, $clearedStats['cache_hits']);
-        $this->assertEquals(0, $clearedStats['cache_misses']);
+        $this->assertSame([], StaticFileManager::getRegisteredFiles());
+        $this->assertSame([], StaticFileManager::getRegisteredPaths());
+        $this->assertSame(0, StaticFileManager::getStats()['registered_files']);
     }
 
-    public function testConfigure(): void
+    public function testConfigureDoesNotThrow(): void
     {
-        // Test the public configure() method
-        StaticFileManager::configure(
-            [
-                'max_file_size' => 5242880, // 5MB
-                'enable_cache' => false,
-                'security_check' => true
-            ]
-        );
+        StaticFileManager::configure(['max_file_size' => 5]);
+        StaticFileManager::configure(['max_file_size' => 10485760]);
 
-        // Configuration should not throw any errors
         $this->assertTrue(true);
-
-        // Reset to defaults
-        StaticFileManager::configure(
-            [
-                'enable_cache' => true,
-                'max_file_size' => 10485760
-            ]
-        );
     }
 
-    public function testGetPathInfo(): void
+    public function testSimpleStaticFileManagerIsTheSameImplementation(): void
     {
-        // Test the public getPathInfo() method
-        $pathInfo = StaticFileManager::getPathInfo('/nonexistent');
-        $this->assertNull($pathInfo);
+        $this->assertTrue(is_subclass_of(SimpleStaticFileManager::class, StaticFileManager::class));
 
-        // Try registering a path first
-        try {
-            StaticFileManager::register('/test', $this->testDir);
-            $pathInfo = StaticFileManager::getPathInfo('/test');
-            $this->assertIsArray($pathInfo);
-            $this->assertArrayHasKey('physical_path', $pathInfo);
-            $this->assertArrayHasKey('options', $pathInfo);
-        } catch (\Exception $e) {
-            // Expected if path resolution fails
-            $this->assertStringContains('Cannot resolve real path', $e->getMessage());
-        }
+        StaticFileManager::registerDirectory('/assets', $this->testDir);
+
+        // Uma única implementação: o "Simple" lê o mesmo estado do Static.
+        $this->assertContains('/assets/app.js', SimpleStaticFileManager::getRegisteredFiles());
     }
 }
