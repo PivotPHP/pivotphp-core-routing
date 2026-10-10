@@ -7,24 +7,26 @@ use PivotPHP\Routing\Router\Router;
 
 class RegexRoutingIntegrationTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
-        Router::clear();
+        $this->router = new Router();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
-        Router::clear();
+        $this->router->clear();
     }
+
+
 
     /**
      * @test
      */
     public function testSimpleNumericConstraint(): void
     {
-        Router::get(
+        $this->router->get(
             '/users/:id<\d+>',
             function ($req, $res) {
                 return $res->json(['user_id' => $req->param('id')]);
@@ -32,12 +34,12 @@ class RegexRoutingIntegrationTest extends TestCase
         );
 
         // Deve corresponder
-        $route = Router::identify('GET', '/users/123');
+        $route = $this->router->identify('GET', '/users/123');
         $this->assertNotNull($route);
         $this->assertEquals('/users/:id<\d+>', $route['path']);
 
         // Não deve corresponder (letras)
-        $route = Router::identify('GET', '/users/abc');
+        $route = $this->router->identify('GET', '/users/abc');
         $this->assertNull($route);
     }
 
@@ -46,7 +48,7 @@ class RegexRoutingIntegrationTest extends TestCase
      */
     public function testSlugConstraint(): void
     {
-        Router::get(
+        $this->router->get(
             '/posts/:slug<slug>',
             function ($req, $res) {
                 return $res->json(['slug' => $req->param('slug')]);
@@ -54,15 +56,15 @@ class RegexRoutingIntegrationTest extends TestCase
         );
 
         // Deve corresponder
-        $route = Router::identify('GET', '/posts/my-awesome-post-123');
+        $route = $this->router->identify('GET', '/posts/my-awesome-post-123');
         $this->assertNotNull($route);
 
         // Não deve corresponder (maiúsculas)
-        $route = Router::identify('GET', '/posts/My-Awesome-Post');
+        $route = $this->router->identify('GET', '/posts/My-Awesome-Post');
         $this->assertNull($route);
 
         // Não deve corresponder (caracteres especiais)
-        $route = Router::identify('GET', '/posts/my_post!');
+        $route = $this->router->identify('GET', '/posts/my_post!');
         $this->assertNull($route);
     }
 
@@ -71,7 +73,7 @@ class RegexRoutingIntegrationTest extends TestCase
      */
     public function testDateConstraints(): void
     {
-        Router::get(
+        $this->router->get(
             '/archive/:year<year>/:month<month>/:day<day>',
             function ($req, $res) {
                 return $res->json(
@@ -85,15 +87,15 @@ class RegexRoutingIntegrationTest extends TestCase
         );
 
         // Deve corresponder
-        $route = Router::identify('GET', '/archive/2024/01/15');
+        $route = $this->router->identify('GET', '/archive/2024/01/15');
         $this->assertNotNull($route);
 
         // Não deve corresponder (ano inválido)
-        $route = Router::identify('GET', '/archive/24/01/15');
+        $route = $this->router->identify('GET', '/archive/24/01/15');
         $this->assertNull($route);
 
         // Não deve corresponder (mês inválido)
-        $route = Router::identify('GET', '/archive/2024/1/15');
+        $route = $this->router->identify('GET', '/archive/2024/1/15');
         $this->assertNull($route);
     }
 
@@ -102,7 +104,7 @@ class RegexRoutingIntegrationTest extends TestCase
      */
     public function testUUIDConstraint(): void
     {
-        Router::get(
+        $this->router->get(
             '/api/resources/:uuid<uuid>',
             function ($req, $res) {
                 return $res->json(['uuid' => $req->param('uuid')]);
@@ -111,16 +113,16 @@ class RegexRoutingIntegrationTest extends TestCase
 
         // UUID válido
         $validUuid = '550e8400-e29b-41d4-a716-446655440000';
-        $route = Router::identify('GET', "/api/resources/{$validUuid}");
+        $route = $this->router->identify('GET', "/api/resources/{$validUuid}");
         $this->assertNotNull($route);
 
         // UUID inválido (maiúsculas)
         $invalidUuid = '550E8400-E29B-41D4-A716-446655440000';
-        $route = Router::identify('GET', "/api/resources/{$invalidUuid}");
+        $route = $this->router->identify('GET', "/api/resources/{$invalidUuid}");
         $this->assertNull($route);
 
         // UUID inválido (formato errado)
-        $route = Router::identify('GET', '/api/resources/not-a-uuid');
+        $route = $this->router->identify('GET', '/api/resources/not-a-uuid');
         $this->assertNull($route);
     }
 
@@ -129,7 +131,7 @@ class RegexRoutingIntegrationTest extends TestCase
      */
     public function testFileExtensionConstraint(): void
     {
-        Router::get(
+        $this->router->get(
             '/files/:filename<[\w-]+>.:ext<jpg|png|gif|webp>',
             function ($req, $res) {
                 return $res->json(
@@ -144,14 +146,14 @@ class RegexRoutingIntegrationTest extends TestCase
         // Extensões válidas
         $validExtensions = ['jpg', 'png', 'gif', 'webp'];
         foreach ($validExtensions as $ext) {
-            $route = Router::identify('GET', "/files/my-image.{$ext}");
+            $route = $this->router->identify('GET', "/files/my-image.{$ext}");
             $this->assertNotNull($route, "Failed for extension: {$ext}");
         }
 
         // Extensões inválidas
         $invalidExtensions = ['pdf', 'doc', 'exe'];
         foreach ($invalidExtensions as $ext) {
-            $route = Router::identify('GET', "/files/my-file.{$ext}");
+            $route = $this->router->identify('GET', "/files/my-file.{$ext}");
             $this->assertNull($route, "Should not match extension: {$ext}");
         }
     }
@@ -161,7 +163,7 @@ class RegexRoutingIntegrationTest extends TestCase
      */
     public function testComplexEmailPattern(): void
     {
-        Router::get(
+        $this->router->get(
             '/contact/:email<[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}>',
             function ($req, $res) {
                 return $res->json(['email' => $req->param('email')]);
@@ -176,7 +178,7 @@ class RegexRoutingIntegrationTest extends TestCase
         ];
 
         foreach ($validEmails as $email) {
-            $route = Router::identify('GET', '/contact/' . $email);
+            $route = $this->router->identify('GET', '/contact/' . $email);
             $this->assertNotNull($route, "Failed for email: {$email}");
         }
 
@@ -189,7 +191,7 @@ class RegexRoutingIntegrationTest extends TestCase
         ];
 
         foreach ($invalidEmails as $email) {
-            $route = Router::identify('GET', '/contact/' . $email);
+            $route = $this->router->identify('GET', '/contact/' . $email);
             $this->assertNull($route, "Should not match email: {$email}");
         }
     }
@@ -200,14 +202,14 @@ class RegexRoutingIntegrationTest extends TestCase
     public function testMultipleConstrainedRoutes(): void
     {
         // Rotas com diferentes constraints para o mesmo path base
-        Router::get(
+        $this->router->get(
             '/items/:id<\d+>',
             function ($req, $res) {
                 return $res->json(['type' => 'numeric', 'id' => $req->param('id')]);
             }
         );
 
-        Router::get(
+        $this->router->get(
             '/items/:slug<slug>',
             function ($req, $res) {
                 return $res->json(['type' => 'slug', 'slug' => $req->param('slug')]);
@@ -215,12 +217,12 @@ class RegexRoutingIntegrationTest extends TestCase
         );
 
         // Deve corresponder à rota numérica
-        $route = Router::identify('GET', '/items/123');
+        $route = $this->router->identify('GET', '/items/123');
         $this->assertNotNull($route);
         $this->assertEquals('/items/:id<\d+>', $route['path']);
 
         // Deve corresponder à rota slug
-        $route = Router::identify('GET', '/items/my-item');
+        $route = $this->router->identify('GET', '/items/my-item');
         $this->assertNotNull($route);
         $this->assertEquals('/items/:slug<slug>', $route['path']);
     }
@@ -230,7 +232,7 @@ class RegexRoutingIntegrationTest extends TestCase
      */
     public function testISBNPattern(): void
     {
-        Router::get(
+        $this->router->get(
             '/books/:isbn<\d{3}-\d{10}>',
             function ($req, $res) {
                 return $res->json(['isbn' => $req->param('isbn')]);
@@ -238,7 +240,7 @@ class RegexRoutingIntegrationTest extends TestCase
         );
 
         // ISBN válido
-        $route = Router::identify('GET', '/books/978-0123456789');
+        $route = $this->router->identify('GET', '/books/978-0123456789');
         $this->assertNotNull($route);
 
         // ISBN inválido (formato errado)
@@ -251,7 +253,7 @@ class RegexRoutingIntegrationTest extends TestCase
         ];
 
         foreach ($invalidISBNs as $isbn) {
-            $route = Router::identify('GET', "/books/{$isbn}");
+            $route = $this->router->identify('GET', "/books/{$isbn}");
             $this->assertNull($route, "Should not match ISBN: {$isbn}");
         }
     }
@@ -261,7 +263,7 @@ class RegexRoutingIntegrationTest extends TestCase
      */
     public function testVersionedAPIRoutes(): void
     {
-        Router::get(
+        $this->router->get(
             '/api/:version<v\d+>/users',
             function ($req, $res) {
                 return $res->json(['version' => $req->param('version')]);
@@ -271,14 +273,14 @@ class RegexRoutingIntegrationTest extends TestCase
         // Versões válidas
         $validVersions = ['v1', 'v2', 'v10', 'v123'];
         foreach ($validVersions as $version) {
-            $route = Router::identify('GET', "/api/{$version}/users");
+            $route = $this->router->identify('GET', "/api/{$version}/users");
             $this->assertNotNull($route, "Failed for version: {$version}");
         }
 
         // Versões inválidas
         $invalidVersions = ['1', 'version1', 'v1.0', 'va', 'v'];
         foreach ($invalidVersions as $version) {
-            $route = Router::identify('GET', "/api/{$version}/users");
+            $route = $this->router->identify('GET', "/api/{$version}/users");
             $this->assertNull($route, "Should not match version: {$version}");
         }
     }
@@ -289,7 +291,7 @@ class RegexRoutingIntegrationTest extends TestCase
     public function testBackwardCompatibility(): void
     {
         // Rotas antigas sem constraints devem continuar funcionando
-        Router::get(
+        $this->router->get(
             '/old/route/:id',
             function ($req, $res) {
                 return $res->json(['id' => $req->param('id')]);
@@ -299,7 +301,7 @@ class RegexRoutingIntegrationTest extends TestCase
         // Deve aceitar qualquer valor
         $testValues = ['123', 'abc', 'test-slug', 'special!chars'];
         foreach ($testValues as $value) {
-            $route = Router::identify('GET', "/old/route/{$value}");
+            $route = $this->router->identify('GET', "/old/route/{$value}");
             $this->assertNotNull($route, "Backward compatibility failed for: {$value}");
         }
     }
@@ -309,7 +311,7 @@ class RegexRoutingIntegrationTest extends TestCase
      */
     public function testRouteGroups(): void
     {
-        Router::group(
+        $this->router->group(
             '/admin',
             function ($router) {
                 $router->get(
@@ -329,13 +331,13 @@ class RegexRoutingIntegrationTest extends TestCase
         );
 
         // Deve funcionar com grupos
-        $route = Router::identify('GET', '/admin/users/123');
+        $route = $this->router->identify('GET', '/admin/users/123');
         $this->assertNotNull($route);
 
-        $route = Router::identify('GET', '/admin/users/abc');
+        $route = $this->router->identify('GET', '/admin/users/abc');
         $this->assertNull($route);
 
-        $route = Router::identify('GET', '/admin/posts/my-post');
+        $route = $this->router->identify('GET', '/admin/posts/my-post');
         $this->assertNotNull($route);
     }
 
@@ -350,15 +352,15 @@ class RegexRoutingIntegrationTest extends TestCase
         }
 
         // Force complete cleanup before performance test
-        Router::clear();
-        Router::clear();
+        $this->router->clear();
+        $this->router->clear();
 
         // Garbage collect to ensure clean state
         gc_collect_cycles();
 
         // Adiciona muitas rotas com constraints
         for ($i = 1; $i <= 100; $i++) {
-            Router::get(
+            $this->router->get(
                 "/route{$i}/:id<\d+>",
                 function ($req, $res) use ($i) {
                     return $res->json(['route' => $i, 'id' => $req->param('id')]);
@@ -370,7 +372,7 @@ class RegexRoutingIntegrationTest extends TestCase
 
         // Testa identificação de rotas
         for ($i = 1; $i <= 100; $i++) {
-            $route = Router::identify('GET', "/route{$i}/123");
+            $route = $this->router->identify('GET', "/route{$i}/123");
             $this->assertNotNull($route);
         }
 

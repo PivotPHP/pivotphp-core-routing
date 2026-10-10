@@ -12,14 +12,17 @@ use PivotPHP\Routing\Router\Router;
  */
 class OptionalRouteParamTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
+        $this->router->clear();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router->clear();
     }
 
     /**
@@ -30,7 +33,7 @@ class OptionalRouteParamTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Optional route parameters are not supported');
 
-        Router::get('/opt/:id?', function () {
+        $this->router->get('/opt/:id?', function () {
             return 1;
         });
     }

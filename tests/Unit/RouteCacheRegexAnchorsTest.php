@@ -7,14 +7,17 @@ use PivotPHP\Routing\Router\Router;
 
 class RouteCacheRegexAnchorsTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
+        $this->router->clear();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router->clear();
     }
 
     /**

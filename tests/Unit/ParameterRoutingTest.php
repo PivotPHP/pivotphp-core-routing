@@ -12,14 +12,17 @@ use PivotPHP\Routing\Router\Router;
  */
 class ParameterRoutingTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
+        $this->router->clear();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router->clear();
     }
 
     /**
@@ -27,14 +30,14 @@ class ParameterRoutingTest extends TestCase
      */
     public function testBasicParameterRouting(): void
     {
-        Router::get(
+        $this->router->get(
             '/users/:id',
             function () {
                 return 'user';
             }
         );
 
-        $route = Router::identify('GET', '/users/123');
+        $route = $this->router->identify('GET', '/users/123');
 
         $this->assertNotNull($route);
         $this->assertEquals('/users/:id', $route['path']);
@@ -47,14 +50,14 @@ class ParameterRoutingTest extends TestCase
      */
     public function testMultipleParameterRouting(): void
     {
-        Router::get(
+        $this->router->get(
             '/users/:userId/posts/:postId',
             function () {
                 return 'user post';
             }
         );
 
-        $route = Router::identify('GET', '/users/456/posts/789');
+        $route = $this->router->identify('GET', '/users/456/posts/789');
 
         $this->assertNotNull($route);
         $this->assertEquals('/users/:userId/posts/:postId', $route['path']);
@@ -68,7 +71,7 @@ class ParameterRoutingTest extends TestCase
      */
     public function testParameterWithConstraints(): void
     {
-        Router::get(
+        $this->router->get(
             '/api/items/:id<\d+>',
             function () {
                 return 'item';
@@ -76,12 +79,12 @@ class ParameterRoutingTest extends TestCase
         );
 
         // Valid numeric parameter
-        $route1 = Router::identify('GET', '/api/items/123');
+        $route1 = $this->router->identify('GET', '/api/items/123');
         $this->assertNotNull($route1);
         $this->assertEquals('123', $route1['matched_params']['id']);
 
         // Invalid non-numeric parameter should not match
-        $route2 = Router::identify('GET', '/api/items/abc');
+        $route2 = $this->router->identify('GET', '/api/items/abc');
         $this->assertNull($route2);
     }
 
@@ -90,7 +93,7 @@ class ParameterRoutingTest extends TestCase
      */
     public function testComplexConstraints(): void
     {
-        Router::get(
+        $this->router->get(
             '/files/:filename<[a-zA-Z0-9_-]+\.[a-z]{2,4}>',
             function () {
                 return 'file';
@@ -98,17 +101,17 @@ class ParameterRoutingTest extends TestCase
         );
 
         // Valid filename
-        $route1 = Router::identify('GET', '/files/document.pdf');
+        $route1 = $this->router->identify('GET', '/files/document.pdf');
         $this->assertNotNull($route1);
         $this->assertEquals('document.pdf', $route1['matched_params']['filename']);
 
         // Valid filename with underscores and dashes
-        $route2 = Router::identify('GET', '/files/my_file-v2.txt');
+        $route2 = $this->router->identify('GET', '/files/my_file-v2.txt');
         $this->assertNotNull($route2);
         $this->assertEquals('my_file-v2.txt', $route2['matched_params']['filename']);
 
         // Invalid filename (spaces not allowed)
-        $route3 = Router::identify('GET', '/files/my file.txt');
+        $route3 = $this->router->identify('GET', '/files/my file.txt');
         $this->assertNull($route3);
     }
 
@@ -117,14 +120,14 @@ class ParameterRoutingTest extends TestCase
      */
     public function testSlugParameters(): void
     {
-        Router::get(
+        $this->router->get(
             '/blog/:year<\d{4}>/:month<\d{2}>/:slug',
             function () {
                 return 'blog post';
             }
         );
 
-        $route = Router::identify('GET', '/blog/2024/12/my-awesome-post');
+        $route = $this->router->identify('GET', '/blog/2024/12/my-awesome-post');
 
         $this->assertNotNull($route);
         $this->assertEquals('2024', $route['matched_params']['year']);
@@ -142,7 +145,7 @@ class ParameterRoutingTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Optional route parameters are not supported');
 
-        Router::get(
+        $this->router->get(
             '/search/:query/:page?',
             function () {
                 return 'search';
@@ -156,7 +159,7 @@ class ParameterRoutingTest extends TestCase
     public function testPerformanceJsonSizeRoute(): void
     {
         // Create the specific route mentioned in the issue
-        Router::get(
+        $this->router->get(
             '/performance/json/:size',
             function ($req, $res) {
                 $size = $req->param('size');
@@ -200,20 +203,20 @@ class ParameterRoutingTest extends TestCase
         );
 
         // Test valid sizes
-        $route1 = Router::identify('GET', '/performance/json/small');
+        $route1 = $this->router->identify('GET', '/performance/json/small');
         $this->assertNotNull($route1);
         $this->assertEquals('small', $route1['matched_params']['size']);
 
-        $route2 = Router::identify('GET', '/performance/json/medium');
+        $route2 = $this->router->identify('GET', '/performance/json/medium');
         $this->assertNotNull($route2);
         $this->assertEquals('medium', $route2['matched_params']['size']);
 
-        $route3 = Router::identify('GET', '/performance/json/large');
+        $route3 = $this->router->identify('GET', '/performance/json/large');
         $this->assertNotNull($route3);
         $this->assertEquals('large', $route3['matched_params']['size']);
 
         // Test invalid size
-        $route4 = Router::identify('GET', '/performance/json/invalid');
+        $route4 = $this->router->identify('GET', '/performance/json/invalid');
         $this->assertNotNull($route4); // Route should match
         $this->assertEquals('invalid', $route4['matched_params']['size']); // But parameter should be 'invalid'
     }
@@ -223,7 +226,7 @@ class ParameterRoutingTest extends TestCase
      */
     public function testNestedGroupsWithParameters(): void
     {
-        Router::group(
+        $this->router->group(
             '/api/v1',
             function ($router) {
                 $router->group(
@@ -247,11 +250,11 @@ class ParameterRoutingTest extends TestCase
             }
         );
 
-        $route1 = Router::identify('GET', '/api/v1/users/123/profile');
+        $route1 = $this->router->identify('GET', '/api/v1/users/123/profile');
         $this->assertNotNull($route1);
         $this->assertEquals('123', $route1['matched_params']['id']);
 
-        $route2 = Router::identify('GET', '/api/v1/users/456/posts/789');
+        $route2 = $this->router->identify('GET', '/api/v1/users/456/posts/789');
         $this->assertNotNull($route2);
         $this->assertEquals('456', $route2['matched_params']['id']);
         $this->assertEquals('789', $route2['matched_params']['postId']);
@@ -262,7 +265,7 @@ class ParameterRoutingTest extends TestCase
      */
     public function testParameterWithSpecialCharacters(): void
     {
-        Router::get(
+        $this->router->get(
             '/encode/:data',
             function () {
                 return 'encoded';
@@ -270,7 +273,7 @@ class ParameterRoutingTest extends TestCase
         );
 
         // Test URL encoded parameters
-        $route = Router::identify('GET', '/encode/hello%20world');
+        $route = $this->router->identify('GET', '/encode/hello%20world');
         $this->assertNotNull($route);
         $this->assertEquals('hello%20world', $route['matched_params']['data']);
     }
@@ -280,7 +283,7 @@ class ParameterRoutingTest extends TestCase
      */
     public function testNumericConstraintValidation(): void
     {
-        Router::get(
+        $this->router->get(
             '/pages/:page<\d+>',
             function () {
                 return 'page';
@@ -288,16 +291,16 @@ class ParameterRoutingTest extends TestCase
         );
 
         // Valid numeric
-        $route1 = Router::identify('GET', '/pages/42');
+        $route1 = $this->router->identify('GET', '/pages/42');
         $this->assertNotNull($route1);
         $this->assertEquals('42', $route1['matched_params']['page']);
 
         // Invalid - letters
-        $route2 = Router::identify('GET', '/pages/abc');
+        $route2 = $this->router->identify('GET', '/pages/abc');
         $this->assertNull($route2);
 
         // Invalid - mixed
-        $route3 = Router::identify('GET', '/pages/42abc');
+        $route3 = $this->router->identify('GET', '/pages/42abc');
         $this->assertNull($route3);
     }
 
@@ -306,14 +309,14 @@ class ParameterRoutingTest extends TestCase
      */
     public function testRouteParameterExtraction(): void
     {
-        Router::get(
+        $this->router->get(
             '/products/:category/:id<\d+>',
             function () {
                 return 'product';
             }
         );
 
-        $route = Router::identify('GET', '/products/electronics/12345');
+        $route = $this->router->identify('GET', '/products/electronics/12345');
 
         $this->assertNotNull($route);
         $this->assertArrayHasKey('matched_params', $route);
@@ -329,14 +332,14 @@ class ParameterRoutingTest extends TestCase
     public function testConflictingRoutes(): void
     {
         // Register conflicting routes - specific should match before generic
-        Router::get(
+        $this->router->get(
             '/users/admin',
             function () {
                 return 'admin';
             }
         );
 
-        Router::get(
+        $this->router->get(
             '/users/:id',
             function () {
                 return 'user';
@@ -344,12 +347,12 @@ class ParameterRoutingTest extends TestCase
         );
 
         // Static route should match first
-        $route1 = Router::identify('GET', '/users/admin');
+        $route1 = $this->router->identify('GET', '/users/admin');
         $this->assertNotNull($route1);
         $this->assertEquals('/users/admin', $route1['path']);
 
         // Parameter route should match for other values
-        $route2 = Router::identify('GET', '/users/123');
+        $route2 = $this->router->identify('GET', '/users/123');
         $this->assertNotNull($route2);
         $this->assertEquals('/users/:id', $route2['path']);
         $this->assertEquals('123', $route2['matched_params']['id']);

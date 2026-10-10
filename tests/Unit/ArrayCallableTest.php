@@ -13,17 +13,20 @@ use PivotPHP\Routing\Tests\Unit\TestController;
  */
 class ArrayCallableTest extends TestCase
 {
+    private Router $router;
+
     private TestController $controller;
 
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
+        $this->router->clear();
         $this->controller = new TestController();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router->clear();
     }
 
     /**
@@ -31,9 +34,9 @@ class ArrayCallableTest extends TestCase
      */
     public function testArrayCallableWithInstanceMethod(): void
     {
-        Router::get('/test', [$this->controller, 'index']);
+        $this->router->get('/test', [$this->controller, 'index']);
 
-        $route = Router::identify('GET', '/test');
+        $route = $this->router->identify('GET', '/test');
 
         $this->assertNotNull($route);
         $this->assertEquals('/test', $route['path']);
@@ -51,9 +54,9 @@ class ArrayCallableTest extends TestCase
      */
     public function testArrayCallableWithStaticMethod(): void
     {
-        Router::get('/static', [TestController::class, 'staticMethod']);
+        $this->router->get('/static', [TestController::class, 'staticMethod']);
 
-        $route = Router::identify('GET', '/static');
+        $route = $this->router->identify('GET', '/static');
 
         $this->assertNotNull($route);
         $this->assertEquals('/static', $route['path']);
@@ -71,9 +74,9 @@ class ArrayCallableTest extends TestCase
      */
     public function testArrayCallableWithParameters(): void
     {
-        Router::get('/users/:userId/posts/:postId', [$this->controller, 'withParameters']);
+        $this->router->get('/users/:userId/posts/:postId', [$this->controller, 'withParameters']);
 
-        $route = Router::identify('GET', '/users/123/posts/456');
+        $route = $this->router->identify('GET', '/users/123/posts/456');
 
         $this->assertNotNull($route);
         $this->assertEquals('/users/:userId/posts/:postId', $route['path']);
@@ -91,9 +94,9 @@ class ArrayCallableTest extends TestCase
     public function testHealthCheckRoute(): void
     {
         // This is the specific case mentioned by the user
-        Router::get('/health', [$this->controller, 'healthCheck']);
+        $this->router->get('/health', [$this->controller, 'healthCheck']);
 
-        $route = Router::identify('GET', '/health');
+        $route = $this->router->identify('GET', '/health');
 
         $this->assertNotNull($route);
         $this->assertEquals('/health', $route['path']);
@@ -109,13 +112,13 @@ class ArrayCallableTest extends TestCase
      */
     public function testMultipleArrayCallables(): void
     {
-        Router::get('/method1', [$this->controller, 'index']);
-        Router::get('/method2', [$this->controller, 'healthCheck']);
-        Router::get('/static', [TestController::class, 'staticMethod']);
+        $this->router->get('/method1', [$this->controller, 'index']);
+        $this->router->get('/method2', [$this->controller, 'healthCheck']);
+        $this->router->get('/static', [TestController::class, 'staticMethod']);
 
-        $route1 = Router::identify('GET', '/method1');
-        $route2 = Router::identify('GET', '/method2');
-        $route3 = Router::identify('GET', '/static');
+        $route1 = $this->router->identify('GET', '/method1');
+        $route2 = $this->router->identify('GET', '/method2');
+        $route3 = $this->router->identify('GET', '/static');
 
         $this->assertNotNull($route1);
         $this->assertNotNull($route2);
@@ -131,7 +134,7 @@ class ArrayCallableTest extends TestCase
      */
     public function testArrayCallableInGroup(): void
     {
-        Router::group(
+        $this->router->group(
             '/api/v1',
             function ($router) {
                 $router->get('/health', [$this->controller, 'healthCheck']);
@@ -139,8 +142,8 @@ class ArrayCallableTest extends TestCase
             }
         );
 
-        $healthRoute = Router::identify('GET', '/api/v1/health');
-        $userRoute = Router::identify('GET', '/api/v1/users/123');
+        $healthRoute = $this->router->identify('GET', '/api/v1/health');
+        $userRoute = $this->router->identify('GET', '/api/v1/users/123');
 
         $this->assertNotNull($healthRoute);
         $this->assertNotNull($userRoute);
@@ -158,20 +161,20 @@ class ArrayCallableTest extends TestCase
     public function testMixedCallableTypes(): void
     {
         // Mix different callable types
-        Router::get(
+        $this->router->get(
             '/closure',
             function ($req, $res) {
                 return 'closure';
             }
         );
 
-        Router::get('/array', [$this->controller, 'index']);
+        $this->router->get('/array', [$this->controller, 'index']);
 
-        Router::get('/static', [TestController::class, 'staticMethod']);
+        $this->router->get('/static', [TestController::class, 'staticMethod']);
 
-        $closureRoute = Router::identify('GET', '/closure');
-        $arrayRoute = Router::identify('GET', '/array');
-        $staticRoute = Router::identify('GET', '/static');
+        $closureRoute = $this->router->identify('GET', '/closure');
+        $arrayRoute = $this->router->identify('GET', '/array');
+        $staticRoute = $this->router->identify('GET', '/static');
 
         $this->assertNotNull($closureRoute);
         $this->assertNotNull($arrayRoute);
@@ -197,7 +200,7 @@ class ArrayCallableTest extends TestCase
         $this->expectExceptionMessage('Route handler validation failed: Method');
 
         // Try to register an invalid callable
-        Router::get('/invalid', [$this->controller, 'nonExistentMethod']);
+        $this->router->get('/invalid', [$this->controller, 'nonExistentMethod']);
     }
 
     /**
@@ -209,7 +212,7 @@ class ArrayCallableTest extends TestCase
         $this->expectExceptionMessage('Route handler validation failed: Static method');
 
         // Try to register an invalid static callable
-        Router::get('/invalid', [TestController::class, 'nonExistentStaticMethod']);
+        $this->router->get('/invalid', [TestController::class, 'nonExistentStaticMethod']);
     }
 
     /**
@@ -223,9 +226,9 @@ class ArrayCallableTest extends TestCase
             return $next($req, $res);
         };
 
-        Router::get('/with-middleware', [$this->controller, 'index'], [], $middleware);
+        $this->router->get('/with-middleware', [$this->controller, 'index'], [], $middleware);
 
-        $route = Router::identify('GET', '/with-middleware');
+        $route = $this->router->identify('GET', '/with-middleware');
 
         $this->assertNotNull($route);
         $this->assertIsCallable($route['handler']);
@@ -240,9 +243,9 @@ class ArrayCallableTest extends TestCase
     public function testRouterAddMethodDirectly(): void
     {
         // Test the Router::add method directly
-        Router::add('GET', '/direct', [$this->controller, 'index']);
+        $this->router->add('GET', '/direct', [$this->controller, 'index']);
 
-        $route = Router::identify('GET', '/direct');
+        $route = $this->router->identify('GET', '/direct');
 
         $this->assertNotNull($route);
         $this->assertEquals('/direct', $route['path']);
@@ -297,7 +300,7 @@ class ArrayCallableTest extends TestCase
 
         // Register 100 routes with array callables
         for ($i = 0; $i < 100; $i++) {
-            Router::get("/test{$i}", [$this->controller, 'index']);
+            $this->router->get("/test{$i}", [$this->controller, 'index']);
         }
 
         $end = microtime(true);
@@ -314,6 +317,6 @@ class ArrayCallableTest extends TestCase
         $this->assertLessThan($maxDuration, $duration, "Route registration took too long: {$duration}ms");
 
         // Verify all routes were registered
-        $this->assertCount(100, Router::getRoutes());
+        $this->assertCount(100, $this->router->getRoutes());
     }
 }

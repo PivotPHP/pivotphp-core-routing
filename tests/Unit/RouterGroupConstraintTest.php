@@ -7,14 +7,17 @@ use PivotPHP\Routing\Router\Router;
 
 class RouterGroupConstraintTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
+        $this->router->clear();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router->clear();
     }
 
     /**
@@ -23,7 +26,7 @@ class RouterGroupConstraintTest extends TestCase
     public function testGroupRoutesWithConstraints(): void
     {
         // Registra rotas no grupo /api
-        Router::group(
+        $this->router->group(
             '/api',
             function ($router) {
                 $router->get(
@@ -50,18 +53,18 @@ class RouterGroupConstraintTest extends TestCase
         );
 
         // Testa rota com constraint de dígitos
-        $route1 = Router::identify('GET', '/api/users/123');
+        $route1 = $this->router->identify('GET', '/api/users/123');
         $this->assertNotNull($route1);
         $this->assertEquals('/api/users/:id<\d+>', $route1['path']);
         $this->assertArrayHasKey('matched_params', $route1);
         $this->assertEquals('123', $route1['matched_params']['id']);
 
         // Testa que NÃO faz match com string (constraints SÃO aplicadas)
-        $route2 = Router::identify('GET', '/api/users/abc');
+        $route2 = $this->router->identify('GET', '/api/users/abc');
         $this->assertNull($route2); // Deve retornar null pois 'abc' não corresponde a \d+
 
         // Testa rota com múltiplos parâmetros e constraints
-        $route3 = Router::identify('GET', '/api/posts/2025/07/hello-world');
+        $route3 = $this->router->identify('GET', '/api/posts/2025/07/hello-world');
         $this->assertNotNull($route3);
         $this->assertEquals('/api/posts/:year<\d{4}>/:month<\d{2}>/:slug<[a-z0-9-]+>', $route3['path']);
         $this->assertArrayHasKey('matched_params', $route3);
@@ -70,14 +73,14 @@ class RouterGroupConstraintTest extends TestCase
         $this->assertEquals('hello-world', $route3['matched_params']['slug']);
 
         // Testa rota com pattern de SKU
-        $route4 = Router::identify('GET', '/api/products/ABC-1234');
+        $route4 = $this->router->identify('GET', '/api/products/ABC-1234');
         $this->assertNotNull($route4);
         $this->assertEquals('/api/products/:sku<[A-Z]{3}-\d{4}>', $route4['path']);
         $this->assertArrayHasKey('matched_params', $route4);
         $this->assertEquals('ABC-1234', $route4['matched_params']['sku']);
 
         // Testa que NÃO faz match com formato inválido (constraints SÃO aplicadas)
-        $route5 = Router::identify('GET', '/api/products/abc-1234');
+        $route5 = $this->router->identify('GET', '/api/products/abc-1234');
         $this->assertNull($route5); // Deve retornar null pois 'abc' não é uppercase
     }
 
@@ -87,7 +90,7 @@ class RouterGroupConstraintTest extends TestCase
     public function testNestedGroupsWithConstraints(): void
     {
         // Grupos aninhados - agora com paths relativos corretos
-        Router::group(
+        $this->router->group(
             '/v1',
             function ($router) {
                 $router->group(
@@ -104,7 +107,7 @@ class RouterGroupConstraintTest extends TestCase
             }
         );
 
-        $route = Router::identify('GET', '/v1/admin/users/456/edit');
+        $route = $this->router->identify('GET', '/v1/admin/users/456/edit');
         $this->assertNotNull($route);
         $this->assertEquals('/v1/admin/users/:id<\d+>/edit', $route['path']);
         $this->assertArrayHasKey('matched_params', $route);
@@ -116,7 +119,7 @@ class RouterGroupConstraintTest extends TestCase
      */
     public function testGroupIdentificationUsesCompiledPatterns(): void
     {
-        Router::group(
+        $this->router->group(
             '/test',
             function ($router) {
                 $router->get(
@@ -129,7 +132,7 @@ class RouterGroupConstraintTest extends TestCase
         );
 
         // Verifica que a rota tem os campos compilados
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
         $lastRoute = end($routes);
 
         $this->assertArrayHasKey('pattern', $lastRoute);
@@ -138,7 +141,7 @@ class RouterGroupConstraintTest extends TestCase
         $this->assertTrue($lastRoute['has_parameters']);
 
         // Verifica que identifyByGroup funciona
-        $identified = Router::identify('GET', '/test/item/999');
+        $identified = $this->router->identify('GET', '/test/item/999');
         $this->assertNotNull($identified);
         $this->assertEquals('999', $identified['matched_params']['id']);
     }
@@ -159,10 +162,10 @@ class RouterGroupConstraintTest extends TestCase
             return $next($req, $res);
         };
 
-        Router::group(
+        $this->router->group(
             '/legacy',
             function () {
-                Router::get(
+                $this->router->get(
                     '/ping',
                     function () {
                         return 'pong';
@@ -172,7 +175,7 @@ class RouterGroupConstraintTest extends TestCase
             [$authMiddleware]
         );
 
-        $route = Router::identify('GET', '/legacy/ping');
+        $route = $this->router->identify('GET', '/legacy/ping');
         $this->assertNotNull($route);
         $this->assertContains($authMiddleware, $route['middlewares']);
 
@@ -194,13 +197,13 @@ class RouterGroupConstraintTest extends TestCase
      */
     public function testNestedGroupWithZeroArgCallbackDoesNotThrow(): void
     {
-        Router::group(
+        $this->router->group(
             '/outer',
             function ($router) {
                 $router->group(
                     '/inner',
                     function () {
-                        Router::get(
+                        $this->router->get(
                             '/ping',
                             function () {
                                 return 'pong';

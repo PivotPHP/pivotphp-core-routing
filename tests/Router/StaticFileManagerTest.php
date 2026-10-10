@@ -11,11 +11,13 @@ use PivotPHP\Routing\Router\StaticFileManager;
 
 class StaticFileManagerTest extends TestCase
 {
+    private Router $router;
+
     private string $testDir;
 
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
         StaticFileManager::clearCache();
 
         $this->testDir = sys_get_temp_dir() . '/pivotphp-static-test-' . uniqid();
@@ -47,14 +49,14 @@ class StaticFileManagerTest extends TestCase
 
     public function testRegistersEachFileAsRoute(): void
     {
-        StaticFileManager::registerDirectory('/assets', $this->testDir);
+        StaticFileManager::registerDirectory('/assets', $this->testDir, [], $this->router);
 
         $files = StaticFileManager::getRegisteredFiles();
         $this->assertContains('/assets/app.js', $files);
         $this->assertContains('/assets/site.css', $files);
         $this->assertContains('/assets/sub/nested.txt', $files);
 
-        $this->assertNotNull(Router::identify('GET', '/assets/app.js'));
+        $this->assertNotNull($this->router->identify('GET', '/assets/app.js'));
     }
 
     public function testThrowsWhenDirectoryMissing(): void
@@ -65,7 +67,7 @@ class StaticFileManagerTest extends TestCase
 
     public function testRegisteredPathsAndPathInfo(): void
     {
-        StaticFileManager::registerDirectory('/assets', $this->testDir);
+        StaticFileManager::registerDirectory('/assets', $this->testDir, [], $this->router);
 
         $this->assertContains('/assets', StaticFileManager::getRegisteredPaths());
 
@@ -79,7 +81,7 @@ class StaticFileManagerTest extends TestCase
 
     public function testStats(): void
     {
-        StaticFileManager::registerDirectory('/assets', $this->testDir);
+        StaticFileManager::registerDirectory('/assets', $this->testDir, [], $this->router);
 
         $stats = StaticFileManager::getStats();
         $this->assertSame(1, $stats['registered_paths']);
@@ -88,7 +90,7 @@ class StaticFileManagerTest extends TestCase
 
     public function testListFilesAndRouteMap(): void
     {
-        StaticFileManager::registerDirectory('/assets', $this->testDir);
+        StaticFileManager::registerDirectory('/assets', $this->testDir, [], $this->router);
 
         $this->assertNotEmpty(StaticFileManager::listFiles('/assets'));
         $this->assertSame([], StaticFileManager::listFiles('/nope'));
@@ -100,7 +102,7 @@ class StaticFileManagerTest extends TestCase
 
     public function testClearCacheResetsState(): void
     {
-        StaticFileManager::registerDirectory('/assets', $this->testDir);
+        StaticFileManager::registerDirectory('/assets', $this->testDir, [], $this->router);
         StaticFileManager::clearCache();
 
         $this->assertSame([], StaticFileManager::getRegisteredFiles());
@@ -120,7 +122,7 @@ class StaticFileManagerTest extends TestCase
     {
         $this->assertTrue(is_subclass_of(SimpleStaticFileManager::class, StaticFileManager::class));
 
-        StaticFileManager::registerDirectory('/assets', $this->testDir);
+        StaticFileManager::registerDirectory('/assets', $this->testDir, [], $this->router);
 
         // Uma única implementação: o "Simple" lê o mesmo estado do Static.
         $this->assertContains('/assets/app.js', SimpleStaticFileManager::getRegisteredFiles());

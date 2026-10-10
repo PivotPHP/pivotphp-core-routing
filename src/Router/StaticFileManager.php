@@ -39,6 +39,14 @@ class StaticFileManager
     private static array $registeredPaths = [];
 
     /**
+     * Rotas de arquivo já registradas em cada router (evita duplicar a rota no mesmo router
+     * sem impedir que outro router receba os mesmos arquivos — SPEC-076).
+     *
+     * @var \WeakMap<Router, array<string, true>>|null
+     */
+    private static ?\WeakMap $routesByRouter = null;
+
+    /**
      * @var array<string, int>
      */
     private static array $stats = [
@@ -94,7 +102,8 @@ class StaticFileManager
     public static function registerDirectory(
         string $routePrefix,
         string $physicalPath,
-        array $options = []
+        array $options = [],
+        ?Router $router = null
     ): void {
         if (!is_dir($physicalPath)) {
             throw new \InvalidArgumentException("Directory does not exist: {$physicalPath}");
@@ -110,11 +119,13 @@ class StaticFileManager
         ];
         self::$stats['registered_paths']++;
 
+        $targetRouter = $router ?? Router::default();
+
         foreach (self::scanDirectory($physicalPath) as $file) {
             $relativePath = str_replace($physicalPath, '', $file['path']);
             $relativePath = str_replace('\\', '/', $relativePath);
 
-            self::registerSingleFile($routePrefix . $relativePath, $file);
+            self::registerSingleFile($routePrefix . $relativePath, $file, $targetRouter);
         }
     }
 
@@ -125,9 +136,13 @@ class StaticFileManager
      * @param array<string, mixed> $options
      * @return callable
      */
-    public static function register(string $routePrefix, string $physicalPath, array $options = []): callable
-    {
-        self::registerDirectory($routePrefix, $physicalPath, $options);
+    public static function register(
+        string $routePrefix,
+        string $physicalPath,
+        array $options = [],
+        ?Router $router = null
+    ): callable {
+        self::registerDirectory($routePrefix, $physicalPath, $options, $router);
 
         return static fn ($req, $res) => $res;
     }
@@ -135,13 +150,26 @@ class StaticFileManager
     /**
      * @param array{path: string, size: int, mime: string, extension: string} $fileInfo
      */
-    private static function registerSingleFile(string $route, array $fileInfo): void
+    private static function registerSingleFile(string $route, array $fileInfo, ?Router $router = null): void
     {
-        if (isset(self::$registeredFiles[$route])) {
+        $targetRouter = $router ?? Router::default();
+
+        if (self::$routesByRouter === null) {
+            /** @var \WeakMap<Router, array<string, true>> $newMap */
+            $newMap = new \WeakMap();
+            self::$routesByRouter = $newMap;
+        }
+        $routesByRouter = self::$routesByRouter;
+
+        /** @var array<string, true> $routerRoutes */
+        $routerRoutes = $routesByRouter[$targetRouter] ?? [];
+        if (isset($routerRoutes[$route])) {
             return;
         }
 
-        Router::add('GET', $route, self::createFileHandler($fileInfo));
+        $targetRouter->add('GET', $route, self::createFileHandler($fileInfo));
+        $routerRoutes[$route] = true;
+        $routesByRouter[$targetRouter] = $routerRoutes;
 
         self::$registeredFiles[$route] = [
             'path' => $fileInfo['path'],
@@ -404,6 +432,7 @@ class StaticFileManager
     {
         self::$registeredFiles = [];
         self::$registeredPaths = [];
+        self::$routesByRouter = null;
         self::$stats = [
             'registered_paths' => 0,
             'registered_files' => 0,

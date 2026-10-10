@@ -7,14 +7,17 @@ use PivotPHP\Routing\Router\Router;
 
 class RouterOptimizedRouteFieldsTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
+        $this->router->clear();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router->clear();
     }
 
     /**
@@ -23,7 +26,7 @@ class RouterOptimizedRouteFieldsTest extends TestCase
     public function testOptimizedRouteIncludesRequiredFields(): void
     {
         // Registra uma rota com parâmetros
-        Router::get(
+        $this->router->get(
             '/users/:id<\d+>',
             function () {
                 return 'user';
@@ -31,7 +34,7 @@ class RouterOptimizedRouteFieldsTest extends TestCase
         );
 
         // Obtém as rotas registradas para inspecionar
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
         $this->assertCount(1, $routes);
 
         $route = $routes[0];
@@ -60,7 +63,7 @@ class RouterOptimizedRouteFieldsTest extends TestCase
      */
     public function testIdentifyOptimizedUsesCompiledFields(): void
     {
-        Router::get(
+        $this->router->get(
             '/posts/:year<\d{4}>/:slug<[a-z0-9-]+>',
             function () {
                 return 'post';
@@ -68,7 +71,7 @@ class RouterOptimizedRouteFieldsTest extends TestCase
         );
 
         // Testa que identifyOptimized consegue encontrar a rota
-        $identified = Router::identify('GET', '/posts/2025/hello-world');
+        $identified = $this->router->identify('GET', '/posts/2025/hello-world');
 
         $this->assertNotNull($identified, 'Route deveria ser identificada');
         $this->assertEquals('/posts/:year<\d{4}>/:slug<[a-z0-9-]+>', $identified['path']);
@@ -82,14 +85,14 @@ class RouterOptimizedRouteFieldsTest extends TestCase
      */
     public function testStaticRouteHasCorrectFields(): void
     {
-        Router::get(
+        $this->router->get(
             '/static/route',
             function () {
                 return 'static';
             }
         );
 
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
         $route = $routes[0];
 
         // Rota estática deve ter has_parameters = false
@@ -107,14 +110,14 @@ class RouterOptimizedRouteFieldsTest extends TestCase
      */
     public function testRoutesByMethodHaveCorrectFields(): void
     {
-        Router::get(
+        $this->router->get(
             '/api/users/:id<\d+>',
             function () {
                 return 'get user';
             }
         );
 
-        Router::post(
+        $this->router->post(
             '/api/users',
             function () {
                 return 'create user';
@@ -122,7 +125,7 @@ class RouterOptimizedRouteFieldsTest extends TestCase
         );
 
         // Testa GET route
-        $getRoute = Router::identify('GET', '/api/users/123');
+        $getRoute = $this->router->identify('GET', '/api/users/123');
         $this->assertNotNull($getRoute);
         $this->assertArrayHasKey('pattern', $getRoute);
         $this->assertArrayHasKey('parameters', $getRoute);
@@ -130,7 +133,7 @@ class RouterOptimizedRouteFieldsTest extends TestCase
         $this->assertTrue($getRoute['has_parameters']);
 
         // Testa POST route
-        $postRoute = Router::identify('POST', '/api/users');
+        $postRoute = $this->router->identify('POST', '/api/users');
         $this->assertNotNull($postRoute);
         $this->assertArrayHasKey('pattern', $postRoute);
         $this->assertArrayHasKey('parameters', $postRoute);

@@ -8,14 +8,17 @@ use ReflectionClass;
 
 class RouterFieldsIntegrityTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
+        $this->router->clear();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router->clear();
     }
 
     /**
@@ -29,7 +32,7 @@ class RouterFieldsIntegrityTest extends TestCase
      */
     public function testDynamicRouteIdentificationWorks(): void
     {
-        Router::get(
+        $this->router->get(
             '/complex/:category<[a-z]+>/items/:id<\d+>/details',
             function () {
                 return 'complex route';
@@ -37,7 +40,7 @@ class RouterFieldsIntegrityTest extends TestCase
         );
 
         // Força o uso do identifyOptimized
-        $identified = Router::identify('GET', '/complex/electronics/items/123/details');
+        $identified = $this->router->identify('GET', '/complex/electronics/items/123/details');
 
         $this->assertNotNull($identified, 'Rota dinâmica complexa deve ser identificada');
         $this->assertArrayHasKey('matched_params', $identified);
@@ -50,14 +53,14 @@ class RouterFieldsIntegrityTest extends TestCase
      */
     public function testStaticRouteIdentificationWorks(): void
     {
-        Router::get(
+        $this->router->get(
             '/static/path/without/params',
             function () {
                 return 'static route';
             }
         );
 
-        $identified = Router::identify('GET', '/static/path/without/params');
+        $identified = $this->router->identify('GET', '/static/path/without/params');
 
         $this->assertNotNull($identified, 'Rota estática deve ser identificada');
         $this->assertEquals('/static/path/without/params', $identified['path']);

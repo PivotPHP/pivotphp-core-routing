@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-10-10
+
+### Changed (Breaking Changes)
+
+- **Router com estado baseado em instâncias** (SPEC-076):
+  `Router` agora armazena rotas, prefixos e middlewares em propriedades de instância (`$routes`, `$groupMiddlewares`, `$current_group_prefix`, `$httpMethodsAccepted`).
+  Múltiplas instâncias de `Router` no mesmo processo PHP operam de maneira totalmente isolada, eliminando vazamento cruzado de rotas.
+  Os métodos de registro e identificação de rotas (`add`, `get`, `post`, `put`, `delete`, `patch`, `options`, `head`, `any`, `match`, `group`, `use`, `identify`, `allowedMethods`, `clear`, etc.) passam a ser métodos de instância.
+- **`RouterFacade` e `Router::default()`**:
+  Adicionada a fachada estática `RouterFacade` e o método `Router::default()` para compatibilidade legada.
+- **`StaticFileManager`**:
+  `registerDirectory()` e `register()` aceitam parâmetro opcional `?Router $router = null`, permitindo registrar arquivos estáticos diretamente na instância de roteador desejada.
+
+### Added
+
+- **`Router::match($methods, $path, $handler, ...)`**: registra o mesmo handler para vários métodos HTTP.
+- **`Router::allowedMethods($path)`** agora é método de instância.
+
+### Fixed
+
+- **Arquivos estáticos em mais de um router** (SPEC-076): a deduplicação do `StaticFileManager` era global,
+  então registrar a mesma pasta num segundo router (ex.: uma segunda `Application`) não criava as rotas lá
+  (404). Agora a deduplicação é por router.
+
+### Migration
+
+- Troque `Router::get(...)`/`Router::identify(...)` etc. por uma instância: `$router = new Router(); $router->get(...)`.
+- Código legado pode usar temporariamente a fachada `RouterFacade` (`@deprecated`) ou `Router::default()`,
+  que mantêm uma instância compartilhada (o comportamento global da 2.x).
+
 ## [2.2.3] - 2026-10-10
 
 ### Security

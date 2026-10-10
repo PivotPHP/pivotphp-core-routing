@@ -15,19 +15,23 @@ use PivotPHP\Routing\Router\Router;
  */
 final class RouterPublicApiTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router->clear();
     }
+
+
 
     public function testStandardHttpMethodsAreAcceptedByDefault(): void
     {
-        $methods = Router::getHttpMethodsAccepted();
+        $methods = $this->router->getHttpMethodsAccepted();
 
         foreach (['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'] as $method) {
             $this->assertContains($method, $methods);
@@ -36,10 +40,10 @@ final class RouterPublicApiTest extends TestCase
 
     public function testAddHttpMethodNormalisesCaseWithoutDuplicates(): void
     {
-        Router::addHttpMethod('purge');
-        Router::addHttpMethod('PURGE');
+        $this->router->addHttpMethod('purge');
+        $this->router->addHttpMethod('PURGE');
 
-        $methods = Router::getHttpMethodsAccepted();
+        $methods = $this->router->getHttpMethodsAccepted();
 
         $this->assertContains('PURGE', $methods);
         $this->assertNotContains('purge', $methods);
@@ -50,9 +54,9 @@ final class RouterPublicApiTest extends TestCase
     {
         $handler = static fn () => 'test';
 
-        Router::get('/test', $handler);
+        $this->router->get('/test', $handler);
 
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
         $this->assertCount(1, $routes);
         $this->assertSame('GET', $routes[0]['method']);
         $this->assertSame('/test', $routes[0]['path']);
@@ -61,32 +65,32 @@ final class RouterPublicApiTest extends TestCase
 
     public function testIdentifyReturnsRouteOrNull(): void
     {
-        Router::get('/test', static fn () => 'test');
+        $this->router->get('/test', static fn () => 'test');
 
-        $found = Router::identify('GET', '/test');
+        $found = $this->router->identify('GET', '/test');
         $this->assertIsArray($found);
         $this->assertSame('/test', $found['path']);
 
-        $this->assertNull(Router::identify('GET', '/missing'));
-        $this->assertNull(Router::identify('POST', '/test'));
+        $this->assertNull($this->router->identify('GET', '/missing'));
+        $this->assertNull($this->router->identify('POST', '/test'));
     }
 
     public function testToStringListsRegisteredRoutes(): void
     {
-        $this->assertSame('', Router::toString());
+        $this->assertSame('', $this->router->toString());
 
-        Router::get('/a', static fn () => 'a');
-        Router::post('/b', static fn () => 'b');
+        $this->router->get('/a', static fn () => 'a');
+        $this->router->post('/b', static fn () => 'b');
 
-        $this->assertSame("GET /a => Callable\nPOST /b => Callable\n", Router::toString());
+        $this->assertSame("GET /a => Callable\nPOST /b => Callable\n", $this->router->toString());
     }
 
     public function testClearRemovesRoutes(): void
     {
-        Router::get('/a', static fn () => 'a');
+        $this->router->get('/a', static fn () => 'a');
 
-        Router::clear();
+        $this->router->clear();
 
-        $this->assertSame([], Router::getRoutes());
+        $this->assertSame([], $this->router->getRoutes());
     }
 }
