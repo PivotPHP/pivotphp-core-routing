@@ -47,8 +47,8 @@ pivotphp-core-routing/
 
 ```bash
 composer test           # PHPUnit
-composer phpstan        # PHPStan nível 9 (phpstan analyse src --level=9)
-composer cs:check       # PSR-12 (phpcs --standard=PSR12 src tests)
+composer phpstan        # PHPStan 2 nível 9 (phpstan.neon)
+composer cs:check       # PSR-12 (phpcs.xml)
 composer cs:fix         # Auto-correção
 composer quality:check  # phpstan + cs:check + test
 ```

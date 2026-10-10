@@ -32,7 +32,7 @@ class CallableResolver
         }
 
         // Resolução específica para array callables
-        if (is_array($handler) && count($handler) === 2) {
+        if (is_array($handler) && count($handler) === 2 && array_is_list($handler)) {
             return self::resolveArrayCallable($handler);
         }
 

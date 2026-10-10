@@ -314,6 +314,9 @@ class Arr
             } else {
                 $key = 'unknown';
             }
+            if (!is_int($key) && !is_string($key)) {
+                $key = is_scalar($key) ? (string) $key : 'unknown';
+            }
             $results[$key][] = $item;
         }
 
