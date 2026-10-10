@@ -31,8 +31,8 @@ pivotphp-core-routing/
 │   │   ├── RouterInstance.php   # Sub-router de instância usado por group()
 │   │   ├── Route.php            # Valor-objeto legado (compatibilidade)
 │   │   ├── RouteCollection.php  # Coleção legada (compatibilidade)
-│   │   ├── StaticFileManager.php
-│   │   └── SimpleStaticFileManager.php
+│   │   ├── StaticFileManager.php        # Registra cada arquivo do diretório como rota
+│   │   └── SimpleStaticFileManager.php  # @deprecated — subclasse de compatibilidade
 │   └── Utils/                   # Utilitários
 │       ├── CallableResolver.php # Resolve handler (closure | [Classe, 'metodo'])
 │       ├── Arr.php
@@ -112,7 +112,8 @@ consumidor antes de alterar contratos.
 
 ## Versionamento
 
-- **Versão atual**: 2.0.0 (remoção de cache/plugins/estatísticas — SPEC-086).
+- **Versão atual**: 2.2.1 (SPEC-095 unificou os static file managers; SPEC-061/072 corrigidos;
+  dependências enxugadas). Linha 2.x desde a simplificação da 2.0.0 (SPEC-086).
 - **PHP**: 8.1+
 - **Licença**: MIT
 
