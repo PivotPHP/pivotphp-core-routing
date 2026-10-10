@@ -197,8 +197,46 @@ class Router
 
     /**
      * Identifica a rota que casa com o método e o path.
+     *
+     * HEAD sem rota explícita cai para a rota GET (a emissão omite o corpo) — SPEC-072.
      */
     public static function identify(string $method, ?string $path = null): ?array
+    {
+        $route = self::matchMethod($method, $path);
+
+        if ($route === null && strtoupper($method) === 'HEAD') {
+            $route = self::matchMethod('GET', $path);
+        }
+
+        return $route;
+    }
+
+    /**
+     * Métodos HTTP com ao menos uma rota casando com o path (para 405 com `Allow`) — SPEC-072.
+     *
+     * @return array<int, string>
+     */
+    public static function allowedMethods(string $path): array
+    {
+        $allowed = [];
+
+        foreach (self::$httpMethodsAccepted as $method) {
+            if (self::matchMethod($method, $path) !== null) {
+                $allowed[] = $method;
+            }
+        }
+
+        if (in_array('GET', $allowed, true) && !in_array('HEAD', $allowed, true)) {
+            $allowed[] = 'HEAD';
+        }
+
+        return $allowed;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function matchMethod(string $method, ?string $path = null): ?array
     {
         $method = strtoupper($method);
 
