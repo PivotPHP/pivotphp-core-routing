@@ -154,15 +154,22 @@ class StaticFileManager
     {
         $targetRouter = $router ?? Router::default();
 
-        self::$routesByRouter ??= new \WeakMap();
-        $routerRoutes = self::$routesByRouter[$targetRouter] ?? [];
+        if (self::$routesByRouter === null) {
+            /** @var \WeakMap<Router, array<string, true>> $newMap */
+            $newMap = new \WeakMap();
+            self::$routesByRouter = $newMap;
+        }
+        $routesByRouter = self::$routesByRouter;
+
+        /** @var array<string, true> $routerRoutes */
+        $routerRoutes = $routesByRouter[$targetRouter] ?? [];
         if (isset($routerRoutes[$route])) {
             return;
         }
 
         $targetRouter->add('GET', $route, self::createFileHandler($fileInfo));
         $routerRoutes[$route] = true;
-        self::$routesByRouter[$targetRouter] = $routerRoutes;
+        $routesByRouter[$targetRouter] = $routerRoutes;
 
         self::$registeredFiles[$route] = [
             'path' => $fileInfo['path'],
