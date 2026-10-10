@@ -147,7 +147,7 @@ class Router
     /**
      * Adiciona uma nova rota.
      *
-     * @param callable|array{0: string, 1: string} $handler
+     * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
     public static function add(
@@ -197,8 +197,6 @@ class Router
 
     /**
      * Identifica a rota que casa com o método e o path.
-     *
-     * @return array<string, mixed>|null
      */
     public static function identify(string $method, ?string $path = null): ?array
     {
@@ -656,7 +654,7 @@ class Router
     // ======================================================================
 
     /**
-     * @param callable|array{0: string, 1: string} $handler
+     * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
     public static function get(
@@ -669,7 +667,7 @@ class Router
     }
 
     /**
-     * @param callable|array{0: string, 1: string} $handler
+     * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
     public static function post(
@@ -682,7 +680,7 @@ class Router
     }
 
     /**
-     * @param callable|array{0: string, 1: string} $handler
+     * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
     public static function put(
@@ -695,7 +693,7 @@ class Router
     }
 
     /**
-     * @param callable|array{0: string, 1: string} $handler
+     * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
     public static function delete(
@@ -708,7 +706,7 @@ class Router
     }
 
     /**
-     * @param callable|array{0: string, 1: string} $handler
+     * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
     public static function patch(
@@ -721,7 +719,7 @@ class Router
     }
 
     /**
-     * @param callable|array{0: string, 1: string} $handler
+     * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
     public static function options(
@@ -734,7 +732,7 @@ class Router
     }
 
     /**
-     * @param callable|array{0: string, 1: string} $handler
+     * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
     public static function head(
@@ -747,7 +745,7 @@ class Router
     }
 
     /**
-     * @param callable|array{0: string, 1: string} $handler
+     * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
     public static function any(
@@ -770,7 +768,7 @@ class Router
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * Retorna as rotas registradas.
      */
     public static function getRoutes(): array
     {

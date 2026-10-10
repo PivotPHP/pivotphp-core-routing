@@ -1,357 +1,122 @@
 # CLAUDE.md - PivotPHP Core Routing
 
-This file provides guidance to Claude Code when working with the PivotPHP Core Routing package.
+Este arquivo orienta o trabalho no pacote **pivotphp/core-routing**.
 
-## Package Overview
+## Visão geral
 
-**pivotphp/core-routing** is a modular, high-performance routing system extracted from pivotphp-core. It provides Express.js-inspired routing with full PSR-7/PSR-15 compliance and a powerful plugin architecture.
+**pivotphp/core-routing** é o motor de roteamento do PivotPHP, extraído do `pivotphp-core`.
+Faz **uma coisa bem**: registra rotas, compila padrões e casa o path — sem cache, sem plugins e
+sem "otimizações" que não têm efeito real em PHP-FPM (SPEC-086).
 
-## Key Features
+API inspirada no Express.js, compatível com PSR-7/PSR-15.
 
-- **Express.js API**: Familiar routing patterns (get, post, put, delete, etc.)
-- **High Performance**: Multi-level caching, route indexing, object pooling
-- **PSR Compliance**: PSR-7 (HTTP), PSR-15 (Middleware), PSR-6/PSR-16 (Cache)
-- **Plugin System**: Extensible architecture with built-in plugins
-- **File Caching**: Persistent route compilation for faster startup
-- **Static File Serving**: Express-style static file management
-- **Modular**: Use independently or integrate with PivotPHP Core
+## Recursos
 
-## Project Structure
+- **API Express.js**: verbos `get/post/put/delete/patch/options/head/any` + `add()`.
+- **Grupos e prefixos**: `group()` e `use()` (com suporte a grupos aninhados).
+- **Compilação de padrões**: `:param`, `{param}` e `<constraint>` viram regex (shortcuts
+  `int`, `slug`, `alpha`, `alnum`, `uuid`, `date`, `year`, `month`, `day`).
+- **Casar**: `identify($method, $path)` com varredura linear simples.
+- **Introspecção**: `getRoutes()`, `getHttpMethodsAccepted()`, `toString()`.
+- **Isolamento**: `clear()` limpa o estado estático (usado pelo `Application` do core).
+- **Arquivos estáticos**: `StaticFileManager` registra arquivos como rotas.
+
+## Estrutura
 
 ```
 pivotphp-core-routing/
 ├── src/
-│   ├── Contracts/          # Interfaces for routing components
-│   │   ├── RouterInterface.php
-│   │   ├── RouteInterface.php
-│   │   ├── RouteCollectionInterface.php
-│   │   ├── RouteMatcherInterface.php
-│   │   ├── PluginInterface.php
-│   │   ├── CacheStrategyInterface.php
-│   │   ├── FileCacheInterface.php
-│   │   └── MemoryCacheInterface.php
-│   ├── Router/             # Core routing implementation
-│   │   ├── Router.php
-│   │   ├── Route.php
-│   │   ├── RouteCollection.php
-│   │   ├── RouteCache.php
-│   │   ├── RouteMemoryManager.php
-│   │   └── RouterInstance.php
-│   ├── Cache/              # Caching strategies
-│   │   ├── FileCacheStrategy.php
-│   │   ├── MemoryCacheStrategy.php
-│   │   └── NullCacheStrategy.php
-│   ├── Static/             # Static file serving
+│   ├── Router/                  # Implementação
+│   │   ├── Router.php           # Fachada estática (registrar + compilar + casar)
+│   │   ├── RouterInstance.php   # Sub-router de instância usado por group()
+│   │   ├── Route.php            # Valor-objeto legado (compatibilidade)
+│   │   ├── RouteCollection.php  # Coleção legada (compatibilidade)
 │   │   ├── StaticFileManager.php
 │   │   └── SimpleStaticFileManager.php
-│   ├── Plugins/            # Plugin system
-│   │   ├── AbstractPlugin.php
-│   │   ├── PluginManager.php
-│   │   ├── MetricsPlugin.php
-│   │   ├── CachePlugin.php
-│   │   └── DebugPlugin.php
-│   └── Utils/              # Utilities
-│       ├── CallableResolver.php
-│       ├── SerializationCache.php
-│       └── Arr.php
-├── tests/                  # Test suites
-│   ├── Router/
-│   ├── Unit/
-│   ├── Integration/
-│   ├── Plugins/
-│   └── Cache/
-└── storage/cache/routes/   # Cache directory
+│   └── Utils/                   # Utilitários
+│       ├── CallableResolver.php # Resolve handler (closure | [Classe, 'metodo'])
+│       ├── Arr.php
+│       └── Utils.php
+└── tests/
+    ├── Router/
+    ├── Unit/
+    └── Integration/
 ```
 
-## Essential Commands
+## Comandos essenciais
 
-### Development Workflow
 ```bash
-# Run all tests
-composer test
-
-# Run tests with coverage
-composer test:coverage
-
-# Static analysis (PHPStan Level 9)
-composer phpstan
-
-# Code style check (PSR-12)
-composer cs:check
-
-# Auto-fix code style
-composer cs:fix
-
-# All quality checks
-composer quality:check
+composer test           # PHPUnit
+composer phpstan        # PHPStan nível 9 (phpstan analyse src --level=9)
+composer cs:check       # PSR-12 (phpcs --standard=PSR12 src tests)
+composer cs:fix         # Auto-correção
+composer quality:check  # phpstan + cs:check + test
 ```
 
-### Running Specific Tests
-```bash
-# Run specific test file
-vendor/bin/phpunit tests/Router/RouterTest.php
+## API do Router
 
-# Run specific test suite
-vendor/bin/phpunit --testsuite=Core
-vendor/bin/phpunit --testsuite=Plugins
-vendor/bin/phpunit --testsuite=Cache
-```
-
-## Architecture Patterns
-
-### Contract-Based Design
-All major components are defined by interfaces in `src/Contracts/`, allowing for:
-- Alternative implementations
-- Easy testing with mocks
-- Clear API boundaries
-- Backward compatibility
-
-### Plugin System
-Plugins extend router functionality without modifying core code:
+Todos os métodos são **estáticos** (o `Router` mantém estado estático; ver SPEC-076 para o
+problema de isolamento entre instâncias de `Application`).
 
 ```php
-use PivotPHP\Routing\Plugins\AbstractPlugin;
-use PivotPHP\Routing\Contracts\RouterInterface;
-
-class CustomPlugin extends AbstractPlugin
-{
-    public function getName(): string
-    {
-        return 'custom';
-    }
-
-    public function getVersion(): string
-    {
-        return '1.0.0';
-    }
-
-    public function boot(): void
-    {
-        // Plugin initialization
-    }
-}
-
-// Register plugin
-$router->registerPlugin(new CustomPlugin());
-```
-
-### Cache Strategies
-Three caching strategies available:
-
-1. **FileCacheStrategy**: Persistent file-based caching
-```php
-use PivotPHP\Routing\Cache\FileCacheStrategy;
-
-$cache = new FileCacheStrategy('/path/to/cache');
-$router->setCacheStrategy($cache);
-```
-
-2. **MemoryCacheStrategy**: High-performance in-memory caching
-```php
-use PivotPHP\Routing\Cache\MemoryCacheStrategy;
-
-$cache = new MemoryCacheStrategy(10 * 1024 * 1024); // 10MB limit
-$router->setCacheStrategy($cache);
-```
-
-3. **NullCacheStrategy**: No-op for when caching is disabled
-
-## Coding Standards
-
-### Type Safety
-- Strict typing enforced throughout (`declare(strict_types=1);`)
-- PHPStan Level 9 compliance required
-- All parameters and return types must be declared
-
-### PSR-12 Compliance
-- Follow PSR-12 coding style
-- Use `composer cs:fix` to auto-format
-- All code must pass `composer cs:check`
-
-### Documentation
-- All public methods require PHPDoc comments
-- Include `@param`, `@return`, and `@throws` tags
-- Document complex logic with inline comments
-
-## Testing Guidelines
-
-### Test Organization
-- **Router/** - Core router functionality tests
-- **Unit/** - Isolated unit tests
-- **Integration/** - Component integration tests
-- **Plugins/** - Plugin-specific tests
-- **Cache/** - Caching strategy tests
-
-### Test Standards
-- Each test class should test one component
-- Use descriptive test method names
-- Include edge cases and error conditions
-- Maintain >90% code coverage
-
-### Example Test
-```php
-use PHPUnit\Framework\TestCase;
 use PivotPHP\Routing\Router\Router;
 
-class RouterTest extends TestCase
-{
-    public function testBasicGetRoute(): void
-    {
-        Router::get('/users', function($req, $res) {
-            return $res->json(['users' => []]);
-        });
+Router::get('/users', fn($req, $res) => $res->json([]));
+Router::get('/users/:id<\d+>', [UserController::class, 'show']); // array callable
 
-        $route = Router::identify('GET', '/users');
-        $this->assertNotNull($route);
-        $this->assertEquals('/users', $route['path']);
-    }
-}
+Router::group('/api', function ($router) {
+    $router->get('/status', fn() => 'ok');
+}, [$authMiddleware]);
+
+Router::use('/admin', $adminMiddleware); // middlewares de grupo por prefixo
+
+$route = Router::identify('GET', '/users/42'); // ?array
+$routes = Router::getRoutes();
+Router::clear();
 ```
 
-## Performance Considerations
+### Handler
 
-### Route Compilation
-- Routes are compiled to regex patterns on registration
-- Patterns are cached for reuse
-- Use constraints for better performance: `/users/:id<\d+>`
+Formatos suportados: `Closure`, função nomeada, ou array callable
+`[Classe::class, 'metodo']`. O formato legado `'Controller@method'` **não** é suportado
+(`TypeError`). A resolução é feita por `Utils\CallableResolver`.
 
-### Memory Management
-- RouteMemoryManager tracks memory usage
-- Automatic garbage collection when thresholds are exceeded
-- Monitor memory with `$router::getStats()`
+## Padrões de código
 
-### Caching Strategy
-- File cache for production (persistent across requests)
-- Memory cache for development (faster but cleared on restart)
-- Null cache for testing (no overhead)
+- `declare(strict_types=1)`, PSR-12, PHPStan nível 9 (tolerância zero).
+- Tipos declarados em todos os parâmetros e retornos.
+- O tipo do handler é **intencionalmente** `callable|array` (sem value type) para casar com a
+  API pública do `pivotphp-core`; o shape do array callable é validado/narrowed dentro de
+  `add()` via `CallableResolver`. Da mesma forma, `identify()`/`getRoutes()` retornam arrays
+  "soltos" de propósito — não adicionar `@return array<...>` explícito, pois isso vira erro
+  "mixed" no consumidor (`pivotphp-core/phpstan.neon` tem `treatPhpDocTypesAsCertain: false`).
+  As regras de `ignoreErrors` em `phpstan.neon` documentam essas duas exceções.
 
-## Integration with PivotPHP Core
+## Testes
 
-### Service Provider (v2.0)
-```php
-use PivotPHP\Core\Providers\ServiceProvider;
-use PivotPHP\Routing\Router\Router;
-use PivotPHP\Routing\Cache\FileCacheStrategy;
+- `tests/Router/` — comportamento do Router (compilação, identificação, grupos, estáticos).
+- `tests/Unit/` — unidades isoladas (parâmetros, callables, regex).
+- `tests/Integration/` — integração.
 
-class RoutingServiceProvider extends ServiceProvider
-{
-    public function register(): void
-    {
-        $this->app->singleton(Router::class, function($app) {
-            $router = new Router();
+Ao mudar o comportamento, atualize os testes correspondentes. A suíte do `pivotphp-core` também
+é consumidora (CI do core garante que `identify()`/`getRoutes()`/verbos continuam funcionando).
 
-            // Configure caching
-            $cache = new FileCacheStrategy(
-                $app->storagePath('cache/routes')
-            );
-            $router->setCacheStrategy($cache);
+## Integração com o PivotPHP Core
 
-            return $router;
-        });
-    }
-}
-```
+O `pivotphp-core` consome este pacote via `PivotPHP\Routing\Router\Router` (namespace). O
+`Application` do core chama `Router::clear()` no boot e registra rotas via
+`$this->router->get(...)`.
 
-### Breaking Changes from v1.x
-- Namespace changed from `PivotPHP\Core\Routing` to `PivotPHP\Routing\Router`
-- Router implements `RouterInterface`
-- Cache system now uses strategy pattern
-- Plugin system added
+Mudanças na API pública deste pacote podem quebrar o `pivotphp-core` — verifique o uso no
+consumidor antes de alterar contratos.
 
-## Built-in Plugins
+## Versionamento
 
-### MetricsPlugin
-Collects routing performance metrics:
-```php
-use PivotPHP\Routing\Plugins\MetricsPlugin;
+- **Versão atual**: 2.0.0 (remoção de cache/plugins/estatísticas — SPEC-086).
+- **PHP**: 8.1+
+- **Licença**: MIT
 
-$metrics = new MetricsPlugin();
-$router->registerPlugin($metrics);
-
-// Get metrics
-$stats = $metrics->getMetrics();
-$topRoutes = $metrics->getTopRoutes(10);
-$slowest = $metrics->getSlowestRoutes(10);
-```
-
-### CachePlugin
-Enhanced caching with automatic warming:
-```php
-use PivotPHP\Routing\Plugins\CachePlugin;
-use PivotPHP\Routing\Cache\FileCacheStrategy;
-
-$cache = new CachePlugin(
-    new FileCacheStrategy('/cache'),
-    ['auto_warm' => true]
-);
-$router->registerPlugin($cache);
-```
-
-### DebugPlugin
-Development debugging tools:
-```php
-use PivotPHP\Routing\Plugins\DebugPlugin;
-
-$debug = new DebugPlugin();
-$router->registerPlugin($debug);
-
-// Inspect routes
-$allRoutes = $debug->dumpRoutes();
-$tree = $debug->getRouteTree();
-$stats = $debug->getRouteStats();
-```
-
-## Version Information
-
-- **Current Version**: 1.0.0 (Initial Release)
-- **PHP Requirements**: 8.1+
-- **Dependencies**: PSR-7, PSR-15, PSR-6/PSR-16
-- **License**: MIT
-
-## Migration from pivotphp-core v1.x
-
-### Namespace Updates
-```php
-// Old
-use PivotPHP\Core\Routing\Router;
-use PivotPHP\Core\Routing\Route;
-
-// New
-use PivotPHP\Routing\Router\Router;
-use PivotPHP\Routing\Router\Route;
-```
-
-### Cache System
-```php
-// Old (implicit in-memory caching)
-Router::get('/users', $handler);
-
-// New (explicit strategy)
-use PivotPHP\Routing\Cache\FileCacheStrategy;
-
-$cache = new FileCacheStrategy('/cache');
-$router->setCacheStrategy($cache);
-$router::get('/users', $handler);
-```
-
-### Plugin System (New Feature)
-```php
-// Enable metrics tracking
-$router->registerPlugin(new MetricsPlugin());
-
-// Enable debug tools
-$router->registerPlugin(new DebugPlugin());
-```
-
-## Important Notes
-
-- This package is designed to work independently or with PivotPHP Core v2.0+
-- All performance optimizations from pivotphp-core v1.x are preserved
-- Plugin system allows extensibility without modifying core code
-- File caching improves startup performance in production
-- Memory caching ideal for development environments
-
-## Support and Community
+## Suporte
 
 - **GitHub**: https://github.com/PivotPHP/pivotphp-core-routing
 - **Packagist**: https://packagist.org/packages/pivotphp/core-routing
