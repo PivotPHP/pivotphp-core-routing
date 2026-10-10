@@ -232,8 +232,29 @@ class StaticFileManager
         $maxFileSizeConfig = self::$config['max_file_size'];
         $maxFileSize = is_numeric($maxFileSizeConfig) ? (int) $maxFileSizeConfig : 10485760;
 
+        $root = realpath($path);
+        if ($root === false) {
+            return [];
+        }
+
         foreach ($iterator as $file) {
             if (!$file instanceof \SplFileInfo || !$file->isFile()) {
+                continue;
+            }
+
+            // Hidden files and anything inside hidden directories (.git/, .env*, ...) are never
+            // published (SPEC-062).
+            $relative = substr($file->getPathname(), strlen($path) + 1);
+            $segments = preg_split('#[/\\\\]#', $relative);
+            foreach ($segments === false ? [] : $segments as $segment) {
+                if (str_starts_with($segment, '.')) {
+                    continue 2;
+                }
+            }
+
+            // Symlinks are only followed when the target stays inside the directory (SPEC-062).
+            $real = $file->getRealPath();
+            if ($real === false || !str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
                 continue;
             }
 

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2026-10-10
+
+### Security
+
+- **Arquivos estáticos não publicam mais arquivos ocultos nem conteúdo fora da pasta** (SPEC-062).
+  `StaticFileManager::registerDirectory()` ignora qualquer arquivo cujo caminho tenha um segmento iniciado
+  por `.` (ex.: `.secrets.json`, `.git/config.json`, `.well-known/*`) — antes, só eram barrados quando a
+  extensão não estava na lista permitida — e só segue symlinks cujo destino real fique dentro da pasta
+  (antes, um symlink para fora servia o arquivo de destino). Para servir algo de um caminho oculto, como
+  `/.well-known/...`, registre a rota explicitamente.
+
 ## [2.2.2] - 2026-10-10
 
 ### Added

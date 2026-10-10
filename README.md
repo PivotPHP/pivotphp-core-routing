@@ -72,6 +72,11 @@ use PivotPHP\Routing\Router\StaticFileManager;
 StaticFileManager::registerDirectory('/public', __DIR__ . '/public');
 ```
 
+Each file becomes a `GET` route when the directory is registered. Only files with an allowed extension
+are published; **hidden files and anything inside hidden directories** (`.env*`, `.git/`, `.well-known/`)
+are never published, and **symlinks are followed only when their target stays inside the directory**.
+Register routes explicitly for files you need from a hidden path (e.g. `/.well-known/...`).
+
 ## API reference
 
 ### `Router` (static facade)
