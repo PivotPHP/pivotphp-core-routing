@@ -18,6 +18,14 @@ use PivotPHP\Routing\Utils\CallableResolver;
  */
 class Router
 {
+    /**
+     * Retorna a instância padrão da fachada legada.
+     */
+    public static function default(): self
+    {
+        return RouterFacade::getInstance();
+    }
+
     public const DEFAULT_PATH = '/';
 
     private const CONSTRAINT_SHORTCUTS = [
@@ -43,37 +51,37 @@ class Router
     /**
      * Prefixo de grupo atual (para grupos aninhados).
      */
-    private static string $current_group_prefix = '';
+    private string $current_group_prefix = '';
 
     /**
      * Tabela de rotas registradas.
      *
      * @var array<int, array<string, mixed>>
      */
-    private static array $routes = [];
+    private array $routes = [];
 
     /**
      * Middlewares por prefixo de grupo.
      *
      * @var array<string, array<int, callable>>
      */
-    private static array $groupMiddlewares = [];
+    private array $groupMiddlewares = [];
 
     /**
      * Métodos HTTP aceitos.
      *
      * @var array<int, string>
      */
-    private static array $httpMethodsAccepted = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'];
+    private array $httpMethodsAccepted = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'];
 
     /**
      * Registra um método HTTP adicional.
      */
-    public static function addHttpMethod(string $method): void
+    public function addHttpMethod(string $method): void
     {
         $method = strtoupper($method);
-        if (!in_array($method, self::$httpMethodsAccepted, true)) {
-            self::$httpMethodsAccepted[] = $method;
+        if (!in_array($method, $this->httpMethodsAccepted, true)) {
+            $this->httpMethodsAccepted[] = $method;
         }
     }
 
@@ -83,14 +91,14 @@ class Router
      * Os middlewares valem para as rotas registradas depois cujo caminho começa com o prefixo.
      * Não altera o caminho de nenhuma rota — para prefixar rotas, use group() (SPEC-053).
      */
-    public static function use(string $prev_path, callable ...$middlewares): void
+    public function use(string $prev_path, callable ...$middlewares): void
     {
         if ($prev_path === '') {
             $prev_path = '/';
         }
 
         if (count($middlewares) > 0) {
-            self::$groupMiddlewares[$prev_path] = array_values($middlewares);
+            $this->groupMiddlewares[$prev_path] = array_values($middlewares);
         }
     }
 
@@ -99,28 +107,28 @@ class Router
      *
      * @param array<int, callable> $middlewares
      */
-    public static function group(
+    public function group(
         string $prefix,
         callable $callback,
         array $middlewares = []
     ): void {
         $prefix = self::normalizePrefix($prefix);
 
-        $previousPrefix = self::$current_group_prefix;
+        $previousPrefix = $this->current_group_prefix;
         if ($previousPrefix !== '' && $previousPrefix !== '/') {
             $prefix = $previousPrefix . $prefix;
         }
 
-        $parentMiddlewares = self::$groupMiddlewares[$previousPrefix] ?? [];
+        $parentMiddlewares = $this->groupMiddlewares[$previousPrefix] ?? [];
         $allMiddlewares = array_merge($parentMiddlewares, $middlewares);
 
-        self::$current_group_prefix = $prefix;
+        $this->current_group_prefix = $prefix;
 
         $arity = (new ReflectionFunction(Closure::fromCallable($callback)))->getNumberOfParameters();
 
         if ($arity === 0) {
             if (count($allMiddlewares) > 0) {
-                self::$groupMiddlewares[$prefix] = $allMiddlewares;
+                $this->groupMiddlewares[$prefix] = $allMiddlewares;
             }
 
             call_user_func($callback);
@@ -139,11 +147,11 @@ class Router
                 /** @var array<int, callable> $routeMiddlewares */
                 $routeMiddlewares = $route['middlewares'] ?? [];
 
-                self::add($method, $path, $handler, $metadata, ...$routeMiddlewares);
+                $this->add($method, $path, $handler, $metadata, ...$routeMiddlewares);
             }
         }
 
-        self::$current_group_prefix = $previousPrefix;
+        $this->current_group_prefix = $previousPrefix;
     }
 
     /**
@@ -152,7 +160,7 @@ class Router
      * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
-    public static function add(
+    public function add(
         string $method,
         string $path,
         callable|array $handler,
@@ -162,7 +170,7 @@ class Router
         if ($path === '') {
             $path = self::DEFAULT_PATH;
         }
-        if (!in_array(strtoupper($method), self::$httpMethodsAccepted, true)) {
+        if (!in_array(strtoupper($method), $this->httpMethodsAccepted, true)) {
             throw new InvalidArgumentException("Method {$method} is not supported");
         }
         $method = strtoupper($method);
@@ -182,13 +190,13 @@ class Router
             }
         }
 
-        $path = self::optimizePathProcessing($path);
+        $path = $this->optimizePathProcessing($path);
         $compiled = self::compilePattern($path);
 
-        self::$routes[] = [
+        $this->routes[] = [
             'method' => $method,
             'path' => $path,
-            'middlewares' => array_merge(self::getGroupMiddlewaresForPath($path), $middlewares),
+            'middlewares' => array_merge($this->getGroupMiddlewaresForPath($path), $middlewares),
             'handler' => $resolvedHandler,
             'metadata' => self::sanitizeForJson($metadata),
             'pattern' => $compiled['pattern'],
@@ -202,12 +210,12 @@ class Router
      *
      * HEAD sem rota explícita cai para a rota GET (a emissão omite o corpo) — SPEC-072.
      */
-    public static function identify(string $method, ?string $path = null): ?array
+    public function identify(string $method, ?string $path = null): ?array
     {
-        $route = self::matchMethod($method, $path);
+        $route = $this->matchMethod($method, $path);
 
         if ($route === null && strtoupper($method) === 'HEAD') {
-            $route = self::matchMethod('GET', $path);
+            $route = $this->matchMethod('GET', $path);
         }
 
         return $route;
@@ -218,12 +226,12 @@ class Router
      *
      * @return array<int, string>
      */
-    public static function allowedMethods(string $path): array
+    public function allowedMethods(string $path): array
     {
         $allowed = [];
 
-        foreach (self::$httpMethodsAccepted as $method) {
-            if (self::matchMethod($method, $path) !== null) {
+        foreach ($this->httpMethodsAccepted as $method) {
+            if ($this->matchMethod($method, $path) !== null) {
                 $allowed[] = $method;
             }
         }
@@ -238,7 +246,7 @@ class Router
     /**
      * @return array<string, mixed>|null
      */
-    private static function matchMethod(string $method, ?string $path = null): ?array
+    private function matchMethod(string $method, ?string $path = null): ?array
     {
         $method = strtoupper($method);
 
@@ -249,7 +257,7 @@ class Router
         $normalizedPath = self::normalizePathForMatching($path);
 
         // 1. Match estático exato (com normalização de trailing slash).
-        foreach (self::$routes as $route) {
+        foreach ($this->routes as $route) {
             if ($route['method'] !== $method) {
                 continue;
             }
@@ -261,7 +269,7 @@ class Router
         }
 
         // 2. Match dinâmico (parâmetros).
-        foreach (self::$routes as $route) {
+        foreach ($this->routes as $route) {
             if ($route['method'] !== $method) {
                 continue;
             }
@@ -390,11 +398,11 @@ class Router
     /**
      * Aplica o prefixo de grupo e normaliza o path.
      */
-    private static function optimizePathProcessing(string $path): string
+    private function optimizePathProcessing(string $path): string
     {
-        if (self::$current_group_prefix !== '' && self::$current_group_prefix !== '/') {
-            if (!str_starts_with($path, self::$current_group_prefix)) {
-                $path = self::$current_group_prefix . $path;
+        if ($this->current_group_prefix !== '' && $this->current_group_prefix !== '/') {
+            if (!str_starts_with($path, $this->current_group_prefix)) {
+                $path = $this->current_group_prefix . $path;
                 if (str_contains($path, '//')) {
                     $normalizedPath = preg_replace('/\/+/', '/', $path);
                     $path = $normalizedPath !== null ? $normalizedPath : $path;
@@ -414,14 +422,14 @@ class Router
      *
      * @return array<int, callable>
      */
-    private static function getGroupMiddlewaresForPath(string $path): array
+    private function getGroupMiddlewaresForPath(string $path): array
     {
-        if (count(self::$groupMiddlewares) === 0) {
+        if (count($this->groupMiddlewares) === 0) {
             return [];
         }
 
         $groupMiddlewares = [];
-        foreach (self::$groupMiddlewares as $prefix => $groupMws) {
+        foreach ($this->groupMiddlewares as $prefix => $groupMws) {
             if ($path !== '' && str_starts_with($path, $prefix)) {
                 $groupMiddlewares = array_merge($groupMiddlewares, $groupMws);
             }
@@ -697,141 +705,165 @@ class Router
      * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
-    public static function get(
+    public function get(
         string $path,
         callable|array $handler,
         array $metadata = [],
         callable ...$middlewares
     ): void {
-        self::add('GET', $path, $handler, $metadata, ...$middlewares);
+        $this->add('GET', $path, $handler, $metadata, ...$middlewares);
     }
 
     /**
      * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
-    public static function post(
+    public function post(
         string $path,
         callable|array $handler,
         array $metadata = [],
         callable ...$middlewares
     ): void {
-        self::add('POST', $path, $handler, $metadata, ...$middlewares);
+        $this->add('POST', $path, $handler, $metadata, ...$middlewares);
     }
 
     /**
      * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
-    public static function put(
+    public function put(
         string $path,
         callable|array $handler,
         array $metadata = [],
         callable ...$middlewares
     ): void {
-        self::add('PUT', $path, $handler, $metadata, ...$middlewares);
+        $this->add('PUT', $path, $handler, $metadata, ...$middlewares);
     }
 
     /**
      * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
-    public static function delete(
+    public function delete(
         string $path,
         callable|array $handler,
         array $metadata = [],
         callable ...$middlewares
     ): void {
-        self::add('DELETE', $path, $handler, $metadata, ...$middlewares);
+        $this->add('DELETE', $path, $handler, $metadata, ...$middlewares);
     }
 
     /**
      * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
-    public static function patch(
+    public function patch(
         string $path,
         callable|array $handler,
         array $metadata = [],
         callable ...$middlewares
     ): void {
-        self::add('PATCH', $path, $handler, $metadata, ...$middlewares);
+        $this->add('PATCH', $path, $handler, $metadata, ...$middlewares);
     }
 
     /**
      * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
-    public static function options(
+    public function options(
         string $path,
         callable|array $handler,
         array $metadata = [],
         callable ...$middlewares
     ): void {
-        self::add('OPTIONS', $path, $handler, $metadata, ...$middlewares);
+        $this->add('OPTIONS', $path, $handler, $metadata, ...$middlewares);
     }
 
     /**
      * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
-    public static function head(
+    public function head(
         string $path,
         callable|array $handler,
         array $metadata = [],
         callable ...$middlewares
     ): void {
-        self::add('HEAD', $path, $handler, $metadata, ...$middlewares);
+        $this->add('HEAD', $path, $handler, $metadata, ...$middlewares);
     }
 
     /**
      * @param callable|array $handler
      * @param array<string, mixed> $metadata
      */
-    public static function any(
+    /**
+     * Registra múltiplas rotas para os mesmos handlers.
+     *
+     * @param array<int, string> $methods
+     * @param string        $path
+     * @param callable|array<int, string|object> $handler
+     * @param array<string, mixed> $metadata
+     */
+    public function match(
+        array $methods,
         string $path,
         callable|array $handler,
         array $metadata = [],
         callable ...$middlewares
     ): void {
-        foreach (self::$httpMethodsAccepted as $method) {
-            self::add($method, $path, $handler, $metadata, ...$middlewares);
+        foreach ($methods as $method) {
+            $this->add($method, $path, $handler, $metadata, ...$middlewares);
+        }
+    }
+
+    /**
+     * @param callable|array<int, string|object> $handler
+     * @param array<string, mixed> $metadata
+     */
+    public function any(
+        string $path,
+        callable|array $handler,
+        array $metadata = [],
+        callable ...$middlewares
+    ): void {
+        foreach ($this->httpMethodsAccepted as $method) {
+            $this->add($method, $path, $handler, $metadata, ...$middlewares);
         }
     }
 
     /**
      * @return array<int, string>
      */
-    public static function getHttpMethodsAccepted(): array
+    public function getHttpMethodsAccepted(): array
     {
-        return self::$httpMethodsAccepted;
+        return $this->httpMethodsAccepted;
     }
 
     /**
      * Retorna as rotas registradas.
      */
-    public static function getRoutes(): array
+    public function getRoutes(): array
     {
-        return self::$routes;
+        return $this->routes;
     }
 
     /**
      * Limpa todas as rotas e o estado de grupo.
      */
-    public static function clear(): void
+    public function clear(): void
     {
-        self::$routes = [];
-        self::$groupMiddlewares = [];
-        self::$current_group_prefix = '';
+        $this->routes = [];
+        $this->groupMiddlewares = [];
+        $this->current_group_prefix = '';
     }
 
     /**
      * Converte a tabela de rotas em string legível.
      */
-    public static function toString(): string
+    public function toString(): string
     {
         $output = '';
-        foreach (self::$routes as $route) {
+        foreach ($this->routes as $route) {
             $method = is_string($route['method']) ? $route['method'] : 'UNKNOWN';
             $path = is_string($route['path']) ? $route['path'] : '/';
             $handlerType = is_callable($route['handler']) ? 'Callable' : 'Not Callable';
@@ -848,26 +880,23 @@ class Router
     }
 
     /**
+     * Despacho dinâmico de métodos HTTP customizados na instância.
+     *
      * @param array<int, mixed> $args
      */
-    public static function __callStatic(string $method, array $args): mixed
+    public function __call(string $method, array $args): mixed
     {
-        if (in_array(strtoupper($method), self::$httpMethodsAccepted, true)) {
+        if (in_array(strtoupper($method), $this->httpMethodsAccepted, true)) {
             $path = array_shift($args);
             if (!is_string($path)) {
                 throw new InvalidArgumentException('Route path must be a string');
             }
             /** @phpstan-ignore-next-line Dynamic dispatch: args are validated by add(). */
-            self::add(strtoupper($method), $path, ...$args);
+            $this->add(strtoupper($method), $path, ...$args);
 
             return null;
         }
 
-        if (method_exists(self::class, $method)) {
-            /** @phpstan-ignore-next-line Dynamic method dispatch. */
-            return self::{$method}(...$args);
-        }
-
-        throw new BadMethodCallException("Method {$method} does not exist in " . self::class);
+        throw new BadMethodCallException("Method {$method} does not exist in " . static::class);
     }
 }

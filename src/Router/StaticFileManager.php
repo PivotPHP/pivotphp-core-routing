@@ -94,7 +94,8 @@ class StaticFileManager
     public static function registerDirectory(
         string $routePrefix,
         string $physicalPath,
-        array $options = []
+        array $options = [],
+        ?Router $router = null
     ): void {
         if (!is_dir($physicalPath)) {
             throw new \InvalidArgumentException("Directory does not exist: {$physicalPath}");
@@ -110,11 +111,13 @@ class StaticFileManager
         ];
         self::$stats['registered_paths']++;
 
+        $targetRouter = $router ?? Router::default();
+
         foreach (self::scanDirectory($physicalPath) as $file) {
             $relativePath = str_replace($physicalPath, '', $file['path']);
             $relativePath = str_replace('\\', '/', $relativePath);
 
-            self::registerSingleFile($routePrefix . $relativePath, $file);
+            self::registerSingleFile($routePrefix . $relativePath, $file, $targetRouter);
         }
     }
 
@@ -125,9 +128,13 @@ class StaticFileManager
      * @param array<string, mixed> $options
      * @return callable
      */
-    public static function register(string $routePrefix, string $physicalPath, array $options = []): callable
-    {
-        self::registerDirectory($routePrefix, $physicalPath, $options);
+    public static function register(
+        string $routePrefix,
+        string $physicalPath,
+        array $options = [],
+        ?Router $router = null
+    ): callable {
+        self::registerDirectory($routePrefix, $physicalPath, $options, $router);
 
         return static fn ($req, $res) => $res;
     }
@@ -135,13 +142,14 @@ class StaticFileManager
     /**
      * @param array{path: string, size: int, mime: string, extension: string} $fileInfo
      */
-    private static function registerSingleFile(string $route, array $fileInfo): void
+    private static function registerSingleFile(string $route, array $fileInfo, ?Router $router = null): void
     {
         if (isset(self::$registeredFiles[$route])) {
             return;
         }
 
-        Router::add('GET', $route, self::createFileHandler($fileInfo));
+        $targetRouter = $router ?? Router::default();
+        $targetRouter->add('GET', $route, self::createFileHandler($fileInfo));
 
         self::$registeredFiles[$route] = [
             'path' => $fileInfo['path'],

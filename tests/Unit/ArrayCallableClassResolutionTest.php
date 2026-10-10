@@ -13,14 +13,17 @@ use PivotPHP\Routing\Router\Router;
  */
 class ArrayCallableClassResolutionTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
+        $this->router->clear();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router->clear();
     }
 
     /**
@@ -28,9 +31,9 @@ class ArrayCallableClassResolutionTest extends TestCase
      */
     public function testInstanceMethodReferencedByClassResolvesLazily(): void
     {
-        Router::get('/greet', [InstanceController::class, 'index']);
+        $this->router->get('/greet', [InstanceController::class, 'index']);
 
-        $route = Router::identify('GET', '/greet');
+        $route = $this->router->identify('GET', '/greet');
 
         $this->assertNotNull($route);
         $this->assertInstanceOf(\Closure::class, $route['handler']);
@@ -44,9 +47,9 @@ class ArrayCallableClassResolutionTest extends TestCase
      */
     public function testStaticMethodReferencedByClassRemainsArray(): void
     {
-        Router::get('/static', [InstanceController::class, 'staticMethod']);
+        $this->router->get('/static', [InstanceController::class, 'staticMethod']);
 
-        $route = Router::identify('GET', '/static');
+        $route = $this->router->identify('GET', '/static');
 
         $this->assertNotNull($route);
         $this->assertIsArray($route['handler']);
@@ -59,9 +62,9 @@ class ArrayCallableClassResolutionTest extends TestCase
     public function testInstanceArrayCallableStillWorks(): void
     {
         $controller = new InstanceController();
-        Router::get('/instance', [$controller, 'index']);
+        $this->router->get('/instance', [$controller, 'index']);
 
-        $route = Router::identify('GET', '/instance');
+        $route = $this->router->identify('GET', '/instance');
 
         $this->assertNotNull($route);
         $this->assertIsArray($route['handler']);
@@ -76,6 +79,6 @@ class ArrayCallableClassResolutionTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('does not exist');
 
-        Router::get('/invalid', [InstanceController::class, 'nonExistent']);
+        $this->router->get('/invalid', [InstanceController::class, 'nonExistent']);
     }
 }

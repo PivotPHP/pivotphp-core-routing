@@ -13,16 +13,17 @@ use PivotPHP\Routing\Router\Router;
  */
 class BraceParameterTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
-        Router::clear();
+        $this->router = new Router();
+        $this->router->clear();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
-        Router::clear();
+        $this->router->clear();
     }
 
     /**
@@ -67,11 +68,11 @@ class BraceParameterTest extends TestCase
      */
     public function testBraceParameterMatchesAndExtractsParam(): void
     {
-        Router::get('/users/{id}', function () {
+        $this->router->get('/users/{id}', function () {
             return 'user';
         });
 
-        $route = Router::identify('GET', '/users/123');
+        $route = $this->router->identify('GET', '/users/123');
 
         $this->assertNotNull($route);
         $this->assertEquals('/users/{id}', $route['path']);
@@ -83,11 +84,11 @@ class BraceParameterTest extends TestCase
      */
     public function testMixedBraceAndColonParameters(): void
     {
-        Router::get('/users/{userId}/posts/:postId', function () {
+        $this->router->get('/users/{userId}/posts/:postId', function () {
             return 'post';
         });
 
-        $route = Router::identify('GET', '/users/456/posts/789');
+        $route = $this->router->identify('GET', '/users/456/posts/789');
 
         $this->assertNotNull($route);
         $this->assertEquals('456', $route['matched_params']['userId']);
@@ -99,12 +100,12 @@ class BraceParameterTest extends TestCase
      */
     public function testBraceParameterConstraintRejectsInvalid(): void
     {
-        Router::get('/api/items/{id<\d+>}', function () {
+        $this->router->get('/api/items/{id<\d+>}', function () {
             return 'item';
         });
 
-        $this->assertNotNull(Router::identify('GET', '/api/items/123'));
-        $this->assertNull(Router::identify('GET', '/api/items/abc'));
+        $this->assertNotNull($this->router->identify('GET', '/api/items/123'));
+        $this->assertNull($this->router->identify('GET', '/api/items/abc'));
     }
 
     /**

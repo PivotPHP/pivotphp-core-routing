@@ -18,17 +18,19 @@ use PivotPHP\Routing\Router\Router;
  */
 class RouteCompilationAndIdentificationTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear();
-        Router::clear();
+        $this->router = new Router();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
-        Router::clear();
+        $this->router->clear();
     }
+
+
 
     // ========================================
     // TESTES DE COMPILAÇÃO
@@ -158,11 +160,11 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyStaticRoute(): void
     {
-        Router::get('/users', function () {
+        $this->router->get('/users', function () {
             return 'users list';
         });
 
-        $route = Router::identify('GET', '/users');
+        $route = $this->router->identify('GET', '/users');
 
         $this->assertNotNull($route);
         $this->assertEquals('GET', $route['method']);
@@ -175,11 +177,11 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyRouteWithParameters(): void
     {
-        Router::get('/users/:id', function () {
+        $this->router->get('/users/:id', function () {
             return 'user detail';
         });
 
-        $route = Router::identify('GET', '/users/123');
+        $route = $this->router->identify('GET', '/users/123');
 
         $this->assertNotNull($route);
         $this->assertEquals('GET', $route['method']);
@@ -194,11 +196,11 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyRouteWithMultipleParameters(): void
     {
-        Router::get('/users/:userId/posts/:postId', function () {
+        $this->router->get('/users/:userId/posts/:postId', function () {
             return 'post detail';
         });
 
-        $route = Router::identify('GET', '/users/42/posts/7');
+        $route = $this->router->identify('GET', '/users/42/posts/7');
 
         $this->assertNotNull($route);
         $this->assertArrayHasKey('matched_params', $route);
@@ -212,17 +214,17 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyRouteWithConstrainedParameters(): void
     {
-        Router::get('/users/:id<\d+>', function () {
+        $this->router->get('/users/:id<\d+>', function () {
             return 'user detail';
         });
 
         // Deve identificar com parâmetro numérico válido
-        $route = Router::identify('GET', '/users/123');
+        $route = $this->router->identify('GET', '/users/123');
         $this->assertNotNull($route);
         $this->assertEquals('123', $route['matched_params']['id']);
 
         // Não deve identificar com parâmetro não-numérico
-        $invalidRoute = Router::identify('GET', '/users/abc');
+        $invalidRoute = $this->router->identify('GET', '/users/abc');
         $this->assertNull($invalidRoute);
     }
 
@@ -232,16 +234,16 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyPrioritizesStaticOverDynamic(): void
     {
-        Router::get('/users/:id', function () {
+        $this->router->get('/users/:id', function () {
             return 'dynamic';
         });
 
-        Router::get('/users/admin', function () {
+        $this->router->get('/users/admin', function () {
             return 'static';
         });
 
         // A rota estática deve ter prioridade
-        $route = Router::identify('GET', '/users/admin');
+        $route = $this->router->identify('GET', '/users/admin');
 
         $this->assertNotNull($route);
         $this->assertEquals('/users/admin', $route['path']);
@@ -253,11 +255,11 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyReturnsNullForNonExistentRoute(): void
     {
-        Router::get('/users', function () {
+        $this->router->get('/users', function () {
             return 'users';
         });
 
-        $route = Router::identify('GET', '/posts');
+        $route = $this->router->identify('GET', '/posts');
 
         $this->assertNull($route);
     }
@@ -268,16 +270,16 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyDistinguishesMethods(): void
     {
-        Router::get('/users', function () {
+        $this->router->get('/users', function () {
             return 'GET users';
         });
 
-        Router::post('/users', function () {
+        $this->router->post('/users', function () {
             return 'POST users';
         });
 
-        $getRoute = Router::identify('GET', '/users');
-        $postRoute = Router::identify('POST', '/users');
+        $getRoute = $this->router->identify('GET', '/users');
+        $postRoute = $this->router->identify('POST', '/users');
 
         $this->assertNotNull($getRoute);
         $this->assertNotNull($postRoute);
@@ -296,13 +298,13 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyRouteInGroup(): void
     {
-        Router::group('/api', function ($router) {
+        $this->router->group('/api', function ($router) {
             $router->get('/users', function () {
                 return 'api users';
             });
         });
 
-        $route = Router::identify('GET', '/api/users');
+        $route = $this->router->identify('GET', '/api/users');
 
         $this->assertNotNull($route);
         $this->assertEquals('/api/users', $route['path']);
@@ -315,7 +317,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyRouteInNestedGroups(): void
     {
-        Router::group('/api', function ($router) {
+        $this->router->group('/api', function ($router) {
             $router->group('/v1', function ($group) {
                 $group->get('/users', function () {
                     return 'api v1 users';
@@ -323,7 +325,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
             });
         });
 
-        $route = Router::identify('GET', '/api/v1/users');
+        $route = $this->router->identify('GET', '/api/v1/users');
 
         // Nested groups agora estão implementados ✅
         $this->assertNotNull($route, 'Nested groups should work');
@@ -340,15 +342,15 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentificationUsesCache(): void
     {
-        Router::get('/users/:id', function () {
+        $this->router->get('/users/:id', function () {
             return 'user';
         });
 
         // Primeira identificação
-        $route1 = Router::identify('GET', '/users/123');
+        $route1 = $this->router->identify('GET', '/users/123');
 
         // Segunda identificação deve usar cache
-        $route2 = Router::identify('GET', '/users/123');
+        $route2 = $this->router->identify('GET', '/users/123');
 
         $this->assertEquals($route1, $route2);
     }
@@ -361,7 +363,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
     {
         // Registra 100 rotas
         for ($i = 0; $i < 100; $i++) {
-            Router::get("/route-{$i}", function () {
+            $this->router->get("/route-{$i}", function () {
                 return "route {$i}";
             });
         }
@@ -369,7 +371,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
         $startTime = microtime(true);
 
         // Identifica uma rota no meio
-        $route = Router::identify('GET', '/route-50');
+        $route = $this->router->identify('GET', '/route-50');
 
         $endTime = microtime(true);
         $duration = ($endTime - $startTime) * 1000; // em ms
@@ -414,16 +416,16 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyWithTrailingSlash(): void
     {
-        Router::get('/users', function () {
+        $this->router->get('/users', function () {
             return 'users';
         });
 
         // Sem trailing slash deve funcionar
-        $route1 = Router::identify('GET', '/users');
+        $route1 = $this->router->identify('GET', '/users');
         $this->assertNotNull($route1);
 
         // Com trailing slash - agora deve funcionar com normalização ✅
-        $route2 = Router::identify('GET', '/users/');
+        $route2 = $this->router->identify('GET', '/users/');
         $this->assertNotNull($route2, 'Trailing slash normalization should work');
         $this->assertEquals('/users', $route2['path']);
     }
@@ -434,11 +436,11 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyRootPath(): void
     {
-        Router::get('/', function () {
+        $this->router->get('/', function () {
             return 'home';
         });
 
-        $route = Router::identify('GET', '/');
+        $route = $this->router->identify('GET', '/');
 
         $this->assertNotNull($route);
         $this->assertEquals('/', $route['path']);
@@ -450,11 +452,11 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testIdentifyEmptyPathDefaultsToRoot(): void
     {
-        Router::get('/', function () {
+        $this->router->get('/', function () {
             return 'home';
         });
 
-        $route = Router::identify('GET', null);
+        $route = $this->router->identify('GET', null);
 
         $this->assertNotNull($route);
         $this->assertEquals('/', $route['path']);
@@ -493,17 +495,17 @@ class RouteCompilationAndIdentificationTest extends TestCase
     public function testIdentifyWithComplexRealWorldScenario(): void
     {
         // Simula um cenário real com múltiplas rotas
-        Router::get('/', function () {
+        $this->router->get('/', function () {
             return 'home';
         });
-        Router::get('/about', function () {
+        $this->router->get('/about', function () {
             return 'about';
         });
-        Router::get('/contact', function () {
+        $this->router->get('/contact', function () {
             return 'contact';
         });
 
-        Router::group('/api', function ($router) {
+        $this->router->group('/api', function ($router) {
             $router->get('/users', function () {
                 return 'users list';
             });
@@ -531,7 +533,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
         ];
 
         foreach ($tests as [$method, $path, $expectedPath]) {
-            $route = Router::identify($method, $path);
+            $route = $this->router->identify($method, $path);
             $this->assertNotNull($route, "Route {$method} {$path} should be found");
             $this->assertEquals($expectedPath, $route['path']);
         }
@@ -559,13 +561,13 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testTrailingSlashWithDynamicRoutes(): void
     {
-        Router::get('/users/:id', function () {
+        $this->router->get('/users/:id', function () {
             return 'user detail';
         });
 
         // Ambos devem funcionar
-        $route1 = Router::identify('GET', '/users/123');
-        $route2 = Router::identify('GET', '/users/123/');
+        $route1 = $this->router->identify('GET', '/users/123');
+        $route2 = $this->router->identify('GET', '/users/123/');
 
         $this->assertNotNull($route1);
         $this->assertNotNull($route2);
@@ -579,15 +581,15 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testTrailingSlashWithRootPath(): void
     {
-        Router::get('/', function () {
+        $this->router->get('/', function () {
             return 'home';
         });
 
         // Root path sempre funciona
-        $route1 = Router::identify('GET', '/');
+        $route1 = $this->router->identify('GET', '/');
 
         // Empty string é convertido para / no identify
-        $route2 = Router::identify('GET', null);
+        $route2 = $this->router->identify('GET', null);
 
         $this->assertNotNull($route1);
         $this->assertNotNull($route2);
@@ -599,12 +601,12 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testTrailingSlashWithMultipleSegments(): void
     {
-        Router::get('/api/users/list', function () {
+        $this->router->get('/api/users/list', function () {
             return 'users list';
         });
 
-        $route1 = Router::identify('GET', '/api/users/list');
-        $route2 = Router::identify('GET', '/api/users/list/');
+        $route1 = $this->router->identify('GET', '/api/users/list');
+        $route2 = $this->router->identify('GET', '/api/users/list/');
 
         $this->assertNotNull($route1);
         $this->assertNotNull($route2);
@@ -622,7 +624,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testNestedGroupsWithMultipleLevels(): void
     {
-        Router::group('/api', function ($router) {
+        $this->router->group('/api', function ($router) {
             $router->group('/v1', function ($group) {
                 $group->group('/admin', function ($admin) {
                     $admin->get('/users', function () {
@@ -632,7 +634,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
             });
         });
 
-        $route = Router::identify('GET', '/api/v1/admin/users');
+        $route = $this->router->identify('GET', '/api/v1/admin/users');
 
         $this->assertNotNull($route);
         $this->assertEquals('/api/v1/admin/users', $route['path']);
@@ -652,7 +654,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
             return 'middleware2';
         };
 
-        Router::group('/api', function ($router) use ($middleware2) {
+        $this->router->group('/api', function ($router) use ($middleware2) {
             $router->group('/v1', function ($group) {
                 $group->get('/users', function () {
                     return 'users';
@@ -660,7 +662,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
             }, [$middleware2]);
         }, [$middleware1]);
 
-        $route = Router::identify('GET', '/api/v1/users');
+        $route = $this->router->identify('GET', '/api/v1/users');
 
         $this->assertNotNull($route);
         // Deve ter pelo menos 2 middlewares (herdado do pai + próprio)
@@ -674,7 +676,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testNestedGroupsWithDifferentPaths(): void
     {
-        Router::group('/api', function ($router) {
+        $this->router->group('/api', function ($router) {
             $router->group('/v1', function ($group) {
                 $group->get('/users', function () {
                     return 'v1 users';
@@ -688,8 +690,8 @@ class RouteCompilationAndIdentificationTest extends TestCase
             });
         });
 
-        $routeV1 = Router::identify('GET', '/api/v1/users');
-        $routeV2 = Router::identify('GET', '/api/v2/users');
+        $routeV1 = $this->router->identify('GET', '/api/v1/users');
+        $routeV2 = $this->router->identify('GET', '/api/v2/users');
 
         $this->assertNotNull($routeV1);
         $this->assertNotNull($routeV2);
@@ -703,7 +705,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testNestedGroupsWithParameters(): void
     {
-        Router::group('/api', function ($router) {
+        $this->router->group('/api', function ($router) {
             $router->group('/v1', function ($group) {
                 $group->get('/users/:id', function () {
                     return 'user detail';
@@ -711,7 +713,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
             });
         });
 
-        $route = Router::identify('GET', '/api/v1/users/42');
+        $route = $this->router->identify('GET', '/api/v1/users/42');
 
         $this->assertNotNull($route);
         $this->assertEquals('/api/v1/users/:id', $route['path']);
@@ -725,7 +727,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testNestedGroupsWithTrailingSlash(): void
     {
-        Router::group('/api', function ($router) {
+        $this->router->group('/api', function ($router) {
             $router->group('/v1', function ($group) {
                 $group->get('/users', function () {
                     return 'users';
@@ -734,8 +736,8 @@ class RouteCompilationAndIdentificationTest extends TestCase
         });
 
         // Ambos devem funcionar
-        $route1 = Router::identify('GET', '/api/v1/users');
-        $route2 = Router::identify('GET', '/api/v1/users/');
+        $route1 = $this->router->identify('GET', '/api/v1/users');
+        $route2 = $this->router->identify('GET', '/api/v1/users/');
 
         $this->assertNotNull($route1);
         $this->assertNotNull($route2);

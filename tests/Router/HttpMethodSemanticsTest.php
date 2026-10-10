@@ -12,45 +12,49 @@ use PivotPHP\Routing\Router\Router;
  */
 class HttpMethodSemanticsTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
         parent::setUp();
-        Router::clear();
+        $this->router = new Router();
     }
+
+
 
     public function testHeadFallsBackToGetRoute(): void
     {
-        Router::get('/page', static fn () => 'ok');
+        $this->router->get('/page', static fn () => 'ok');
 
-        $this->assertNotNull(Router::identify('HEAD', '/page'));
-        $this->assertNull(Router::identify('HEAD', '/missing'));
+        $this->assertNotNull($this->router->identify('HEAD', '/page'));
+        $this->assertNull($this->router->identify('HEAD', '/missing'));
     }
 
     public function testHeadPrefersExplicitHeadRoute(): void
     {
-        Router::get('/page', static fn () => 'get');
-        Router::head('/page', static fn () => 'head');
+        $this->router->get('/page', static fn () => 'get');
+        $this->router->head('/page', static fn () => 'head');
 
-        $route = Router::identify('HEAD', '/page');
+        $route = $this->router->identify('HEAD', '/page');
         $this->assertNotNull($route);
         $this->assertSame('HEAD', $route['method']);
     }
 
     public function testAllowedMethodsIncludesHeadWhenGet(): void
     {
-        Router::get('/page', static fn () => 'ok');
+        $this->router->get('/page', static fn () => 'ok');
 
-        $methods = Router::allowedMethods('/page');
+        $methods = $this->router->allowedMethods('/page');
         $this->assertContains('GET', $methods);
         $this->assertContains('HEAD', $methods);
     }
 
     public function testAllowedMethodsForMultipleVerbs(): void
     {
-        Router::get('/r', static fn () => 'g');
-        Router::post('/r', static fn () => 'p');
+        $this->router->get('/r', static fn () => 'g');
+        $this->router->post('/r', static fn () => 'p');
 
-        $methods = Router::allowedMethods('/r');
+        $methods = $this->router->allowedMethods('/r');
         $this->assertContains('GET', $methods);
         $this->assertContains('POST', $methods);
         $this->assertContains('HEAD', $methods);
@@ -58,6 +62,6 @@ class HttpMethodSemanticsTest extends TestCase
 
     public function testAllowedMethodsEmptyForUnknownPath(): void
     {
-        $this->assertSame([], Router::allowedMethods('/nope'));
+        $this->assertSame([], $this->router->allowedMethods('/nope'));
     }
 }

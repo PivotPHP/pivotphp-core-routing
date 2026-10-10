@@ -13,11 +13,13 @@ use PivotPHP\Routing\Router\StaticFileManager;
  */
 final class StaticFileExposureTest extends TestCase
 {
+    private Router $router;
+
     private string $base;
 
     protected function setUp(): void
     {
-        Router::clear();
+        $this->router = new Router();
         StaticFileManager::clearCache();
 
         $this->base = sys_get_temp_dir() . '/pivotphp-static-' . bin2hex(random_bytes(4));
@@ -37,7 +39,7 @@ final class StaticFileExposureTest extends TestCase
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router = new Router();
         StaticFileManager::clearCache();
         exec('rm -rf ' . escapeshellarg($this->base));
     }
@@ -47,9 +49,9 @@ final class StaticFileExposureTest extends TestCase
      */
     private function registeredRoutes(): array
     {
-        StaticFileManager::registerDirectory('/public', $this->base . '/public');
+        StaticFileManager::registerDirectory('/public', $this->base . '/public', [], $this->router);
 
-        $paths = array_column(Router::getRoutes(), 'path');
+        $paths = array_column($this->router->getRoutes(), 'path');
         sort($paths);
 
         return $paths;

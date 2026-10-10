@@ -9,15 +9,19 @@ use PivotPHP\Routing\Router\Router;
 
 class RouterTest extends TestCase
 {
+    private Router $router;
+
     protected function setUp(): void
     {
-        Router::clear(); // Clear any existing routes
+        $this->router = new Router();
     }
 
     protected function tearDown(): void
     {
-        Router::clear();
+        $this->router->clear();
     }
+
+
 
     public function testBasicGetRoute(): void
     {
@@ -25,8 +29,8 @@ class RouterTest extends TestCase
             return $res->withBody('GET route works');
         };
 
-        Router::get('/test', $handler);
-        $routes = Router::getRoutes();
+        $this->router->get('/test', $handler);
+        $routes = $this->router->getRoutes();
 
         $this->assertCount(1, $routes);
         $this->assertEquals('GET', $routes[0]['method']);
@@ -39,8 +43,8 @@ class RouterTest extends TestCase
             return $res->withBody('POST route works');
         };
 
-        Router::post('/test', $handler);
-        $routes = Router::getRoutes();
+        $this->router->post('/test', $handler);
+        $routes = $this->router->getRoutes();
 
         $this->assertCount(1, $routes);
         $this->assertEquals('POST', $routes[0]['method']);
@@ -53,8 +57,8 @@ class RouterTest extends TestCase
             return $res->withBody('PUT route works');
         };
 
-        Router::put('/test', $handler);
-        $routes = Router::getRoutes();
+        $this->router->put('/test', $handler);
+        $routes = $this->router->getRoutes();
 
         $this->assertCount(1, $routes);
         $this->assertEquals('PUT', $routes[0]['method']);
@@ -67,8 +71,8 @@ class RouterTest extends TestCase
             return $res->withBody('DELETE route works');
         };
 
-        Router::delete('/test', $handler);
-        $routes = Router::getRoutes();
+        $this->router->delete('/test', $handler);
+        $routes = $this->router->getRoutes();
 
         $this->assertCount(1, $routes);
         $this->assertEquals('DELETE', $routes[0]['method']);
@@ -77,23 +81,23 @@ class RouterTest extends TestCase
 
     public function testMultipleRoutes(): void
     {
-        Router::get(
+        $this->router->get(
             '/users',
             function () {
             }
         );
-        Router::post(
+        $this->router->post(
             '/users',
             function () {
             }
         );
-        Router::get(
+        $this->router->get(
             '/posts',
             function () {
             }
         );
 
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
         $this->assertCount(3, $routes);
     }
 
@@ -103,8 +107,8 @@ class RouterTest extends TestCase
             return $res->withBody('User route works');
         };
 
-        Router::get('/users/:id', $handler);
-        $routes = Router::getRoutes();
+        $this->router->get('/users/:id', $handler);
+        $routes = $this->router->getRoutes();
 
         $this->assertCount(1, $routes);
         $this->assertEquals('/users/:id', $routes[0]['path']);
@@ -112,12 +116,12 @@ class RouterTest extends TestCase
 
     public function testRouteWithMultipleParameters(): void
     {
-        Router::get(
+        $this->router->get(
             '/users/:userId/posts/:postId',
             function () {
             }
         );
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
 
         $this->assertCount(1, $routes);
         $this->assertEquals('/users/:userId/posts/:postId', $routes[0]['path']);
@@ -125,12 +129,12 @@ class RouterTest extends TestCase
 
     public function testRouteWithRegexConstraints(): void
     {
-        Router::get(
+        $this->router->get(
             '/users/:id<\\d+>',
             function () {
             }
         );
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
 
         $this->assertCount(1, $routes);
         $this->assertEquals('/users/:id<\\d+>', $routes[0]['path']);
@@ -139,9 +143,9 @@ class RouterTest extends TestCase
     public function testArrayCallableHandler(): void
     {
         $handler = [TestController::class, 'staticIndex'];
-        Router::get('/test', $handler);
+        $this->router->get('/test', $handler);
 
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
         $this->assertCount(1, $routes);
         $this->assertEquals($handler, $routes[0]['handler']);
     }
@@ -149,30 +153,30 @@ class RouterTest extends TestCase
 
     public function testClearRoutes(): void
     {
-        Router::get(
+        $this->router->get(
             '/test1',
             function () {
             }
         );
-        Router::get(
+        $this->router->get(
             '/test2',
             function () {
             }
         );
-        $this->assertCount(2, Router::getRoutes());
+        $this->assertCount(2, $this->router->getRoutes());
 
-        Router::clear();
-        $this->assertCount(0, Router::getRoutes());
+        $this->router->clear();
+        $this->assertCount(0, $this->router->getRoutes());
     }
 
     public function testOptionsMethod(): void
     {
-        Router::options(
+        $this->router->options(
             '/test',
             function () {
             }
         );
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
 
         $this->assertCount(1, $routes);
         $this->assertEquals('OPTIONS', $routes[0]['method']);
@@ -180,12 +184,12 @@ class RouterTest extends TestCase
 
     public function testPatchMethod(): void
     {
-        Router::patch(
+        $this->router->patch(
             '/test',
             function () {
             }
         );
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
 
         $this->assertCount(1, $routes);
         $this->assertEquals('PATCH', $routes[0]['method']);
@@ -193,12 +197,12 @@ class RouterTest extends TestCase
 
     public function testHeadMethod(): void
     {
-        Router::head(
+        $this->router->head(
             '/test',
             function () {
             }
         );
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
 
         $this->assertCount(1, $routes);
         $this->assertEquals('HEAD', $routes[0]['method']);
@@ -206,13 +210,13 @@ class RouterTest extends TestCase
 
     public function testAnyMethod(): void
     {
-        Router::clear(); // Clear before this test to ensure clean state
-        Router::any(
+        $this->router->clear(); // Clear before this test to ensure clean state
+        $this->router->any(
             '/test',
             function () {
             }
         );
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
 
         // ANY method may register multiple routes for all HTTP methods
         $this->assertGreaterThan(0, count($routes));
@@ -223,7 +227,7 @@ class RouterTest extends TestCase
 
     public function testRouteGroup(): void
     {
-        Router::group(
+        $this->router->group(
             '/api',
             function ($router) {
                 $router->get(
@@ -239,7 +243,7 @@ class RouterTest extends TestCase
             }
         );
 
-        $routes = Router::getRoutes();
+        $routes = $this->router->getRoutes();
         $this->assertCount(2, $routes);
 
         // Check that routes have the group prefix
