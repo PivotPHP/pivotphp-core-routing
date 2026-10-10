@@ -4,20 +4,19 @@ namespace PivotPHP\Routing\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
 use PivotPHP\Routing\Router\Router;
-use PivotPHP\Routing\Router\RouteCache;
 
 class RegexRoutingIntegrationTest extends TestCase
 {
     protected function setUp(): void
     {
         Router::clear();
-        RouteCache::clear();
+        Router::clear();
     }
 
     protected function tearDown(): void
     {
         Router::clear();
-        RouteCache::clear();
+        Router::clear();
     }
 
     /**
@@ -352,7 +351,7 @@ class RegexRoutingIntegrationTest extends TestCase
 
         // Force complete cleanup before performance test
         Router::clear();
-        RouteCache::clear();
+        Router::clear();
 
         // Garbage collect to ensure clean state
         gc_collect_cycles();

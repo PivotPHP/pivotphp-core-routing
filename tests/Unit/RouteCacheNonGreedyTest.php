@@ -3,18 +3,18 @@
 namespace PivotPHP\Routing\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use PivotPHP\Routing\Router\RouteCache;
+use PivotPHP\Routing\Router\Router;
 
 class RouteCacheNonGreedyTest extends TestCase
 {
     protected function setUp(): void
     {
-        RouteCache::clear();
+        Router::clear();
     }
 
     protected function tearDown(): void
     {
-        RouteCache::clear();
+        Router::clear();
     }
 
     /**
@@ -23,7 +23,7 @@ class RouteCacheNonGreedyTest extends TestCase
     public function testNonGreedyRegexWithAdjacentBlocks(): void
     {
         // Este padrão testa se o regex é greedy ou não
-        $compiled = RouteCache::compilePattern('/api/{^v(\d+)$}/users/{^(\d+)$}/profile');
+        $compiled = Router::compilePattern('/api/{^v(\d+)$}/users/{^(\d+)$}/profile');
 
         // Com regex não-greedy, deve processar cada bloco separadamente
         $this->assertEquals('#^/api/v(\d+)/users/(\d+)/profile/?$#', $compiled['pattern']);
@@ -38,7 +38,7 @@ class RouteCacheNonGreedyTest extends TestCase
     public function testNonGreedyRegexWithComplexPattern(): void
     {
         // Padrão mais complexo com múltiplos blocos
-        $compiled = RouteCache::compilePattern('/data/{^([a-z]+)$}/items/{^(\d{4}-\d{2})$}/details');
+        $compiled = Router::compilePattern('/data/{^([a-z]+)$}/items/{^(\d{4}-\d{2})$}/details');
 
         $this->assertEquals('#^/data/([a-z]+)/items/(\d{4}-\d{2})/details/?$#', $compiled['pattern']);
         $this->assertCount(2, $compiled['parameters']);
@@ -50,7 +50,7 @@ class RouteCacheNonGreedyTest extends TestCase
     public function testNonGreedyWithMixedSyntax(): void
     {
         // Mistura blocos regex com parâmetros normais
-        $compiled = RouteCache::compilePattern('/files/{^(docs|images)$}/:name<[a-z0-9-]+>/{^\\.(pdf|jpg)$}');
+        $compiled = Router::compilePattern('/files/{^(docs|images)$}/:name<[a-z0-9-]+>/{^\\.(pdf|jpg)$}');
 
         // Deve processar os blocos regex e o parâmetro separadamente
         $this->assertStringContainsString('(docs|images)', $compiled['pattern']);
@@ -67,7 +67,7 @@ class RouteCacheNonGreedyTest extends TestCase
     public function testNonGreedyDoesNotAffectSingleBlocks(): void
     {
         // Testa que blocos únicos ainda funcionam corretamente
-        $compiled = RouteCache::compilePattern('/archive/{^(\d{4})/(\d{2})/(.+)$}');
+        $compiled = Router::compilePattern('/archive/{^(\d{4})/(\d{2})/(.+)$}');
 
         $this->assertEquals('#^/archive/(\d{4})/(\d{2})/(.+)/?$#', $compiled['pattern']);
 
@@ -86,7 +86,7 @@ class RouteCacheNonGreedyTest extends TestCase
     public function testNonGreedyWithNestedBraces(): void
     {
         // Testa padrão que contém chaves internas (quantifiers)
-        $compiled = RouteCache::compilePattern('/test/{^([a-z]{3,5})$}/data/{^(\d{1,4})$}');
+        $compiled = Router::compilePattern('/test/{^([a-z]{3,5})$}/data/{^(\d{1,4})$}');
 
         $this->assertEquals('#^/test/([a-z]{3,5})/data/(\d{1,4})/?$#', $compiled['pattern']);
 
@@ -104,7 +104,7 @@ class RouteCacheNonGreedyTest extends TestCase
         // Este caso seria problemático com regex greedy
         // Com greedy: capturaria tudo de {primeiro} até {ultimo}
         // Com non-greedy: processa cada bloco separadamente
-        $compiled = RouteCache::compilePattern('/path/{^first(\d+)$}/middle/{^second(\d+)$}/end');
+        $compiled = Router::compilePattern('/path/{^first(\d+)$}/middle/{^second(\d+)$}/end');
 
         $expected = '#^/path/first(\d+)/middle/second(\d+)/end/?$#';
         $this->assertEquals($expected, $compiled['pattern']);

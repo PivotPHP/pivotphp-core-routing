@@ -23,6 +23,9 @@ class RouterInstance
      */
     private array $groupMiddlewares = [];
 
+    /**
+     * @param array<int, callable> $groupMiddlewares
+     */
     public function __construct(string $prefix = '/', array $groupMiddlewares = [])
     {
         $this->prefix = $prefix === '' ? '/' : $prefix;
@@ -140,6 +143,9 @@ class RouterInstance
     {
         $httpMethod = strtoupper($method);
         $path = $args[0] ?? '/';
+        if (!is_string($path)) {
+            $path = '/';
+        }
         $handlers = array_slice($args, 1);
         $this->add($httpMethod, $path, ...$handlers);
     }
@@ -154,7 +160,7 @@ class RouterInstance
         string $path,
         ...$handlers
     ): void {
-        if (empty($path)) {
+        if ($path === '') {
             $path = '/';
         }
 
@@ -210,6 +216,9 @@ class RouterInstance
     /**
      * Middlewares associados ao grupo (use).
      */
+    /**
+     * @return array<int, callable>
+     */
     public function getGroupMiddlewares(): array
     {
         return $this->groupMiddlewares;
@@ -220,6 +229,7 @@ class RouterInstance
      *
      * @param  string   $prefix
      * @param  callable $callback
+     * @param  array<int, callable> $middlewares
      * @return void
      */
     public function group(string $prefix, callable $callback, array $middlewares = []): void

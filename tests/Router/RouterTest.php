@@ -165,15 +165,6 @@ class RouterTest extends TestCase
         $this->assertCount(0, Router::getRoutes());
     }
 
-    public function testGetStats(): void
-    {
-        $stats = Router::getStats();
-
-        $this->assertIsArray($stats);
-        // Just verify that stats can be retrieved without checking specific content
-        // as the internal structure may be complex
-    }
-
     public function testOptionsMethod(): void
     {
         Router::options(

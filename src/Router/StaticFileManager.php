@@ -43,7 +43,7 @@ class StaticFileManager
 
     /**
      * Pastas registradas
-     * @var array<string, array{physical_path: string, options: array}>
+     * @var array<string, array{physical_path: string, options: array<string, mixed>}>
      */
     private static array $registeredPaths = [];
 
@@ -200,7 +200,7 @@ class StaticFileManager
             }
 
             $relativePath = substr($requestPath, strlen($routePrefix));
-            if (empty($relativePath) || $relativePath === '/') {
+            if ($relativePath === '' || $relativePath === '/') {
                 // Se não há filepath, tenta arquivos index
                 $relativePath = '/';
             } else {
@@ -242,7 +242,7 @@ class StaticFileManager
         $filePath = $physicalPath . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
 
         // Se é diretório, procura index files
-        if (is_dir($filePath)) {
+        if (is_dir($filePath) && isset($options['index']) && is_array($options['index'])) {
             foreach ($options['index'] as $indexFile) {
                 $indexPath = $filePath . DIRECTORY_SEPARATOR . $indexFile;
                 if (file_exists($indexPath) && is_readable($indexPath)) {

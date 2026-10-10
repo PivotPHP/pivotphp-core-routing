@@ -3,18 +3,18 @@
 namespace PivotPHP\Routing\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use PivotPHP\Routing\Router\RouteCache;
+use PivotPHP\Routing\Router\Router;
 
 class RouteCacheRegexAnchorsTest extends TestCase
 {
     protected function setUp(): void
     {
-        RouteCache::clear();
+        Router::clear();
     }
 
     protected function tearDown(): void
     {
-        RouteCache::clear();
+        Router::clear();
     }
 
     /**
@@ -22,7 +22,7 @@ class RouteCacheRegexAnchorsTest extends TestCase
      */
     public function testRegexWithBothAnchors(): void
     {
-        $compiled = RouteCache::compilePattern('/api/{^v(\d+)/users/(\d+)$}');
+        $compiled = Router::compilePattern('/api/{^v(\d+)/users/(\d+)$}');
 
         // Deve remover ^ e $ do regex fornecido
         $this->assertEquals('#^/api/v(\d+)/users/(\d+)/?$#', $compiled['pattern']);
@@ -33,7 +33,7 @@ class RouteCacheRegexAnchorsTest extends TestCase
      */
     public function testRegexWithOnlyStartAnchor(): void
     {
-        $compiled = RouteCache::compilePattern('/test/{^foo/bar/(\w+)}');
+        $compiled = Router::compilePattern('/test/{^foo/bar/(\w+)}');
 
         // Deve remover apenas ^
         $this->assertEquals('#^/test/foo/bar/(\w+)/?$#', $compiled['pattern']);
@@ -44,7 +44,7 @@ class RouteCacheRegexAnchorsTest extends TestCase
      */
     public function testRegexWithOnlyEndAnchor(): void
     {
-        $compiled = RouteCache::compilePattern('/test/{(\w+)/baz$}');
+        $compiled = Router::compilePattern('/test/{(\w+)/baz$}');
 
         // Deve remover apenas $
         $this->assertEquals('#^/test/(\w+)/baz/?$#', $compiled['pattern']);
@@ -55,7 +55,7 @@ class RouteCacheRegexAnchorsTest extends TestCase
      */
     public function testRegexWithoutAnchors(): void
     {
-        $compiled = RouteCache::compilePattern('/test/{(\d{4})-(\d{2})-(\d{2})}');
+        $compiled = Router::compilePattern('/test/{(\d{4})-(\d{2})-(\d{2})}');
 
         // Não deve alterar nada
         $this->assertEquals('#^/test/(\d{4})-(\d{2})-(\d{2})/?$#', $compiled['pattern']);
@@ -67,7 +67,7 @@ class RouteCacheRegexAnchorsTest extends TestCase
     public function testRegexWithAnchorsInMiddle(): void
     {
         // Âncoras no meio do pattern devem ser preservadas
-        $compiled = RouteCache::compilePattern('/test/{(start|^middle$|end)}');
+        $compiled = Router::compilePattern('/test/{(start|^middle$|end)}');
 
         $this->assertEquals('#^/test/(start|^middle$|end)/?$#', $compiled['pattern']);
     }
@@ -78,7 +78,7 @@ class RouteCacheRegexAnchorsTest extends TestCase
     public function testComplexRegexWithNestedGroups(): void
     {
         // Usar um padrão que não cause conflito com o processamento de parâmetros
-        $compiled = RouteCache::compilePattern('/files/{^([a-z]+_[a-z]+)/(\d{4})\.([a-z]{3,4})$}');
+        $compiled = Router::compilePattern('/files/{^([a-z]+_[a-z]+)/(\d{4})\.([a-z]{3,4})$}');
 
         // Deve remover âncoras externas mas preservar a estrutura interna (ponto será escapado)
         $this->assertEquals('#^/files/([a-z]+_[a-z]+)/(\d{4})\\\\.([a-z]{3,4})/?$#', $compiled['pattern']);
@@ -90,7 +90,7 @@ class RouteCacheRegexAnchorsTest extends TestCase
     public function testRegexMatchingWithRemovedAnchors(): void
     {
         $pattern = '/archive/{^(\d{4})/(\d{2})/(.+)$}';
-        $compiled = RouteCache::compilePattern($pattern);
+        $compiled = Router::compilePattern($pattern);
 
         // Testa que o pattern compilado funciona corretamente
         $this->assertMatchesRegularExpression($compiled['pattern'], '/archive/2025/07/my-post');
@@ -108,7 +108,7 @@ class RouteCacheRegexAnchorsTest extends TestCase
      */
     public function testMultipleRegexBlocks(): void
     {
-        $compiled = RouteCache::compilePattern('/api/{^v(\d+)$}/users/{^(\d+)$}');
+        $compiled = Router::compilePattern('/api/{^v(\d+)$}/users/{^(\d+)$}');
 
         // Ambos blocos devem ter âncoras removidas
         $this->assertEquals('#^/api/v(\d+)/users/(\d+)/?$#', $compiled['pattern']);
