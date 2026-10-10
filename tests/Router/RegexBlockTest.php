@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace PivotPHP\Routing\Tests\Router;
 
 use PHPUnit\Framework\TestCase;
-use PivotPHP\Routing\Router\RouteCache;
+use PivotPHP\Routing\Router\Router;
 use ReflectionClass;
 
 /**
@@ -21,7 +21,7 @@ class RegexBlockTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->reflection = new ReflectionClass(RouteCache::class);
+        $this->reflection = new ReflectionClass(Router::class);
         $this->processRegexBlocksMethod = $this->reflection->getMethod('processRegexBlocks');
         $this->processRegexBlocksMethod->setAccessible(true);
     }

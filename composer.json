@@ -1,6 +1,6 @@
 {
     "name": "pivotphp/core-routing",
-    "description": "Modular, high-performance routing system for PivotPHP - Express.js-inspired API with PSR compliance",
+    "description": "Simple, focused routing engine for PivotPHP - Express.js-inspired API with PSR compliance",
     "type": "library",
     "keywords": ["php", "routing", "router", "express", "framework", "pivotphp", "psr-7", "psr-15"],
     "license": "MIT",

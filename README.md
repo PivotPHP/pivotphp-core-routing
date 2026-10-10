@@ -5,18 +5,19 @@
 [![PSR-7](https://img.shields.io/badge/PSR--7-compliant-brightgreen)](https://www.php-fig.org/psr/psr-7/)
 [![PSR-15](https://img.shields.io/badge/PSR--15-compliant-brightgreen)](https://www.php-fig.org/psr/psr-15/)
 
-Modular, high-performance routing system for PivotPHP with Express.js-inspired API and full PSR compliance.
+Simple, focused routing engine for PivotPHP with an Express.js-inspired API. It does one thing
+well: **register routes, compile patterns and match paths** — no caching, no plugins, no
+premature optimization.
 
 ## Features
 
-- **Express.js-Inspired API**: Familiar routing patterns (`get()`, `post()`, `put()`, `delete()`, etc.)
-- **High Performance**: Multi-level caching, route indexing, and memory optimization
-- **PSR Compliant**: Full PSR-7 (HTTP), PSR-15 (Middleware), PSR-6/PSR-16 (Cache) support
-- **Plugin System**: Extensible architecture with built-in plugins
-- **File Caching**: Persistent route compilation for faster startup
-- **Static File Serving**: Express-style static file management
-- **Type Safety**: Strict typing with PHPStan Level 9 compliance
-- **Modular**: Use independently or integrate with PivotPHP Core
+- **Express.js-inspired API**: `get()`, `post()`, `put()`, `delete()`, `patch()`, `options()`,
+  `head()`, `any()` and `add()`.
+- **Groups & prefixes**: `group()` and `use()` (nested groups supported).
+- **Pattern compilation**: `:param`, `{param}` and `<constraint>` with shortcuts (`int`, `slug`,
+  `alpha`, `alnum`, `uuid`, `date`, `year`, `month`, `day`).
+- **Static file serving**: `StaticFileManager` registers files as routes.
+- **Type safety**: strict typing, PHPStan level 9.
 
 ## Installation
 
@@ -27,69 +28,67 @@ composer require pivotphp/core-routing
 ## Quick Start
 
 ```php
-use PivotPHP\Routing\Router;
-
-// Create router instance
-$router = new Router();
+use PivotPHP\Routing\Router\Router;
 
 // Define routes
-$router->get('/users', function($req, $res) {
+Router::get('/users', function ($req, $res) {
     return $res->json(['users' => []]);
 });
 
-$router->post('/users', [UserController::class, 'store']);
+Router::post('/users', [UserController::class, 'store']);
 
 // Route with parameters — both ':id' and '{id}' syntaxes are supported
-$router->get('/users/:id', function($req, $res) {
+Router::get('/users/:id', function ($req, $res) {
     $userId = $req->param('id');
     return $res->json(['user' => ['id' => $userId]]);
 });
 
-$router->get('/books/{isbn}', function($req, $res) {
+Router::get('/books/{isbn}', function ($req, $res) {
     $isbn = $req->param('isbn');
     return $res->json(['book' => ['isbn' => $isbn]]);
 });
 
 // Route groups with prefix and middleware
-$router->group('/api', function() use ($router) {
-    $router->get('/status', function($req, $res) {
+Router::group('/api', function ($router) {
+    $router->get('/status', function ($req, $res) {
         return $res->json(['status' => 'ok']);
     });
-}, $authMiddleware);
+}, [$authMiddleware]);
 
 // Match route
-$route = $router::identify($method, $path);
+$route = Router::identify('GET', '/users/42');
 ```
 
-## Advanced Features
+### Handlers
 
-### Plugin System
+Supported handler syntaxes: `Closure`, named functions, or array callables
+`[Class::class, 'method']`. The legacy `'Controller@method'` string format is **not** supported.
+
+### Static files
 
 ```php
-use PivotPHP\Routing\Plugins\MetricsPlugin;
+use PivotPHP\Routing\Router\StaticFileManager;
 
-$router->registerPlugin(new MetricsPlugin());
+StaticFileManager::registerDirectory('/public', __DIR__ . '/public');
 ```
 
-### File Caching
+## API reference
 
-```php
-use PivotPHP\Routing\Cache\FileCacheStrategy;
+### `Router` (static facade)
 
-$cache = new FileCacheStrategy('/path/to/cache');
-$router->setCacheStrategy($cache);
-
-// Warm cache
-$router->warmCache();
-```
-
-### Static Files
-
-```php
-use PivotPHP\Routing\Static\StaticFileManager;
-
-$router->static('/public', __DIR__ . '/public');
-```
+| Method | Description |
+|---|---|
+| `add($method, $path, $handler, $metadata = [], ...$middlewares)` | Register a route. |
+| `get/post/put/delete/patch/options/head/any($path, $handler, ...)` | HTTP verb shortcuts. |
+| `group($prefix, $callback, $middlewares = [])` | Register a route group. |
+| `use($prefix, ...$middlewares)` | Register group middlewares by prefix. |
+| `addHttpMethod($method)` | Register an additional HTTP method. |
+| `identify($method, $path)` | Match a route; returns the route array or `null`. |
+| `compilePattern($path)` | Compile a path to regex + parameter list. |
+| `isStaticRoute($path)` | Whether a path has no parameters. |
+| `getRoutes()` | All registered routes. |
+| `getHttpMethodsAccepted()` | Accepted HTTP methods. |
+| `clear()` | Clear all registered routes/state. |
 
 ## Requirements
 
@@ -100,40 +99,11 @@ $router->static('/public', __DIR__ . '/public');
 ## Testing
 
 ```bash
-# Run all tests
-composer test
-
-# Run with coverage
-composer test:coverage
-
-# Static analysis
-composer phpstan
-
-# Code style check
-composer cs:check
-
-# Fix code style
-composer cs:fix
-
-# All quality checks
-composer quality:check
+composer test           # PHPUnit
+composer phpstan        # Static analysis (level 9)
+composer cs:check       # PSR-12 style check
+composer quality:check  # phpstan + cs:check + test
 ```
-
-## Performance
-
-PivotPHP Core Routing is designed for high performance:
-
-- **Multi-level caching**: Exact match, compiled routes, pattern cache
-- **Route indexing**: O(1) group lookups, method-based indexing
-- **Memory management**: Automatic garbage collection, usage tracking
-- **Static/Dynamic separation**: Optimized matching strategies
-
-## Documentation
-
-- [Full Documentation](https://pivotphp.com/docs/routing)
-- [Migration Guide](UPGRADE.md)
-- [Plugin Development](docs/plugins.md)
-- [Performance Tuning](docs/performance.md)
 
 ## License
 
@@ -146,6 +116,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Credits
 
-Created by Carlos Fernandes and the PivotPHP community.
+Created by Caio Alberto Fernandes and the PivotPHP community.
 
 Inspired by Express.js routing and built with modern PHP best practices.

@@ -1,113 +1,73 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PivotPHP\Routing\Router;
 
-use InvalidArgumentException;
 use BadMethodCallException;
 use Closure;
+use InvalidArgumentException;
 use ReflectionFunction;
 use PivotPHP\Routing\Utils\CallableResolver;
 
 /**
- * Classe Router responsável pelo registro e identificação otimizada de rotas HTTP.
- * Inclui cache, indexação e otimizações integradas por padrão.
+ * Router simples: registra rotas, compila padrões e casa o path.
+ *
+ * Sem cache, sem plugins, sem gerenciamento de memória, sem estatísticas —
+ * faz uma coisa bem: rotear.
  */
 class Router
 {
+    public const DEFAULT_PATH = '/';
+
+    private const CONSTRAINT_SHORTCUTS = [
+        'int' => '\d+',
+        'slug' => '[a-z0-9-]+',
+        'alpha' => '[a-zA-Z]+',
+        'alnum' => '[a-zA-Z0-9]+',
+        'uuid' => '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
+        'date' => '\d{4}-\d{2}-\d{2}',
+        'year' => '\d{4}',
+        'month' => '\d{2}',
+        'day' => '\d{2}'
+    ];
+
+    private const DANGEROUS_PATTERNS = [
+        '(\w+)*\w*',
+        '(.+)+',
+        '(a*)*',
+        '(a|a)*',
+        '(a+)+b'
+    ];
+
     /**
-     * Prefixo/base para rotas agrupadas.
-     * @var string
+     * Prefixo de grupo atual (para grupos aninhados).
      */
     private static string $current_group_prefix = '';
 
     /**
-     * Lista de definições de rotas HTTP.
-     * Cada rota é representada como um array associativo contendo informações como método, caminho e controlador.
-     * Utilizado para compatibilidade com versões anteriores e para registro de novas rotas.
+     * Tabela de rotas registradas.
+     *
      * @var array<int, array<string, mixed>>
      */
     private static array $routes = [];
 
     /**
-     * Rotas pré-compiladas para acesso rápido.
-     * @var array<string, array>
-     */
-    private static array $preCompiledRoutes = [];
-
-    /**
-     * Índice de rotas por método para busca mais rápida.
-     * @var array<string, array>
-     */
-    private static array $routesByMethod = [];
-
-    /**
-     * Cache de exact matches para rotas exatas.
-     * @var array<string, array>
-     */
-    private static array $exactMatchCache = [];
-
-    /**
-     * Índice de rotas por grupo para acesso O(1).
-     * @var array<string, array>
-     */
-    private static array $groupIndex = [];
-
-    /**
-     * Prefixos de grupos ativos ordenados por comprimento.
-     * @var array<string>
-     */
-    private static array $sortedPrefixes = [];
-
-    /**
-     * Cache de matching de prefixos.
-     * @var array<string, string>
-     */
-    private static array $prefixMatchCache = [];
-
-    /**
-     * Caminho padrão.
-     * @var string
-     */
-    public const DEFAULT_PATH = '/';
-
-    /**
-     * Limite de entradas por cache de URL (prefixMatchCache/exactMatchCache)
-     * para evitar crescimento sem limite em workers persistentes (SPEC-046).
-     */
-    private const MAX_CACHE_ENTRIES = 1000;
-
-    /**
-     * Métodos HTTP aceitos.
-     * @var array<string>
-     */
-    private static array $httpMethodsAccepted = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'];
-
-    /**
-     * Middlewares de grupo por prefixo de rota.
-     * @var array<string, callable[]>
+     * Middlewares por prefixo de grupo.
+     *
+     * @var array<string, array<int, callable>>
      */
     private static array $groupMiddlewares = [];
 
     /**
-     * Estatísticas de performance.
-     * @var array<string, array>
+     * Métodos HTTP aceitos.
+     *
+     * @var array<int, string>
      */
-    private static array $stats = [];
+    private static array $httpMethodsAccepted = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'];
 
     /**
-     * Estatísticas de grupos de rotas.
-     * @var array<string, array>
-     */
-    private static array $groupStats = [];
-
-    /**
-     * Route memory manager instance
-     * @var RouteMemoryManager|null
-     */
-    private static ?RouteMemoryManager $memoryManager = null;
-
-    /**
-     * Permite adicionar métodos HTTP customizados.
+     * Registra um método HTTP adicional.
      */
     public static function addHttpMethod(string $method): void
     {
@@ -122,53 +82,38 @@ class Router
      */
     public static function use(string $prev_path, callable ...$middlewares): void
     {
-        if ($prev_path === '' || $prev_path === null) {
+        if ($prev_path === '') {
             $prev_path = '/';
         }
         self::$current_group_prefix = $prev_path;
 
-        // Se middlewares foram passados, registra para o grupo
         if (count($middlewares) > 0) {
-            self::$groupMiddlewares[$prev_path] = $middlewares;
+            self::$groupMiddlewares[$prev_path] = array_values($middlewares);
         }
     }
 
     /**
-     * Registra um grupo de rotas com otimização integrada.
-     * Suporta grupos aninhados (nested groups).
+     * Registra um grupo de rotas (com suporte a grupos aninhados).
+     *
+     * @param array<int, callable> $middlewares
      */
     public static function group(
         string $prefix,
         callable $callback,
         array $middlewares = []
     ): void {
-        $startTime = microtime(true);
-
-        // Normaliza o prefixo
         $prefix = self::normalizePrefix($prefix);
 
-        // NESTED GROUPS: Concatenar com prefixo existente
         $previousPrefix = self::$current_group_prefix;
-
-        // Se já existe um prefixo de grupo pai, concatena
         if ($previousPrefix !== '' && $previousPrefix !== '/') {
             $prefix = $previousPrefix . $prefix;
         }
 
-        // NESTED GROUPS: Mesclar middlewares do grupo pai
         $parentMiddlewares = self::$groupMiddlewares[$previousPrefix] ?? [];
         $allMiddlewares = array_merge($parentMiddlewares, $middlewares);
 
-        // Mantém prefixo atual para herança durante o cadastro
         self::$current_group_prefix = $prefix;
 
-        // Compatibilidade com a API legada (v1.0.0): callbacks declarados sem
-        // parâmetro (`function () { self::get(...); }`) continuam usando
-        // chamadas estáticas dentro do callback e precisam que os middlewares
-        // do grupo fiquem disponíveis via self::$groupMiddlewares — só assim
-        // self::add()/getGroupMiddlewaresForPath() os aplica. Callbacks que
-        // declaram um parâmetro recebem um RouterInstance explícito (API
-        // atual, suporta grupos aninhados de forma isolada).
         $arity = (new ReflectionFunction(Closure::fromCallable($callback)))->getNumberOfParameters();
 
         if ($arity === 0) {
@@ -178,70 +123,32 @@ class Router
 
             call_user_func($callback);
         } else {
-            // Instancia RouterInstance com prefixo e middlewares herdados
             $groupRouter = new RouterInstance($prefix, $allMiddlewares);
-
-            // Executa o callback com o router de grupo explícito
             call_user_func($callback, $groupRouter);
 
-            // Registra as rotas coletadas pelo RouterInstance.
-            // current_group_prefix permanece = $prefix durante o loop: o path de cada
-            // rota já vem completo do RouterInstance, e optimizePathProcessing() só
-            // prefixa se o path ainda não começar com o prefixo — então não duplica.
-            // Zerar aqui faria add() gravar group_prefix='' na rota, quebrando o
-            // indexamento usado por identifyByGroup(). Middlewares do grupo não são
-            // registrados em self::$groupMiddlewares neste caminho: RouterInstance já
-            // os aplica diretamente a cada rota coletada, e getGroupMiddlewaresForPath()
-            // duplicaria caso o prefixo também estivesse mapeado ali.
             $routes = $groupRouter->getRoutes();
             foreach ($routes as $route) {
                 $method = is_string($route['method'] ?? null) ? $route['method'] : 'GET';
                 $path = is_string($route['path'] ?? null) ? $route['path'] : self::DEFAULT_PATH;
+                /** @var callable|array{0: string, 1: string} $handler */
                 $handler = $route['handler'];
+                /** @var array<string, mixed> $metadata */
                 $metadata = $route['metadata'] ?? [];
+                /** @var array<int, callable> $routeMiddlewares */
                 $routeMiddlewares = $route['middlewares'] ?? [];
+
                 self::add($method, $path, $handler, $metadata, ...$routeMiddlewares);
             }
         }
 
-        // Restaura o prefixo anterior
         self::$current_group_prefix = $previousPrefix;
-
-        // Atualiza índices
-        self::updateGroupIndex($prefix);
-        self::updateSortedPrefixes();
-
-        // Registra estatísticas
-        $executionTime = (microtime(true) - $startTime) * 1000;
-        $routesCount = isset(self::$groupIndex[$prefix])
-            ? array_reduce(
-                self::$groupIndex[$prefix],
-                static fn(int $carry, array $routeList): int => $carry + count($routeList),
-                0
-            )
-            : 0;
-
-        self::$stats['groups'][$prefix] = [
-            'registration_time_ms' => $executionTime,
-            'routes_count' => $routesCount,
-            'has_middlewares' => count($middlewares) > 0,
-            'last_updated' => microtime(true)
-        ];
-
-        // Inicializa estatísticas de grupo para métodos públicos
-        self::$groupStats[$prefix] = [
-            'routes_count' => $routesCount,
-            'registration_time_ms' => $executionTime,
-            'access_count' => 0,
-            'total_access_time_ms' => 0,
-            'has_middlewares' => count($middlewares) > 0,
-            'cache_hits' => 0,
-            'last_access' => null
-        ];
     }
 
     /**
-     * Adiciona uma nova rota com otimizações integradas.
+     * Adiciona uma nova rota.
+     *
+     * @param callable|array $handler
+     * @param array<string, mixed> $metadata
      */
     public static function add(
         string $method,
@@ -250,7 +157,7 @@ class Router
         array $metadata = [],
         callable ...$middlewares
     ): void {
-        if ($path === '' || $path === null) {
+        if ($path === '') {
             $path = self::DEFAULT_PATH;
         }
         if (!in_array(strtoupper($method), self::$httpMethodsAccepted, true)) {
@@ -265,7 +172,6 @@ class Router
             );
         }
 
-        // Validar e resolver o handler usando CallableResolver
         $resolvedHandler = CallableResolver::resolve($handler);
 
         foreach ($middlewares as $mw) {
@@ -274,62 +180,23 @@ class Router
             }
         }
 
-        // OTIMIZAÇÃO: processamento de path
         $path = self::optimizePathProcessing($path);
+        $compiled = self::compilePattern($path);
 
-        // Pre-compila pattern e parâmetros ANTES de criar routeData
-        $compiled = RouteCache::compilePattern($path);
-
-        $routeData = [
+        self::$routes[] = [
             'method' => $method,
             'path' => $path,
             'middlewares' => array_merge(self::getGroupMiddlewaresForPath($path), $middlewares),
-            'handler' => $resolvedHandler, // Usar handler resolvido
+            'handler' => $resolvedHandler,
             'metadata' => self::sanitizeForJson($metadata),
             'pattern' => $compiled['pattern'],
             'parameters' => $compiled['parameters'],
             'has_parameters' => count($compiled['parameters']) > 0
         ];
-
-        // Armazena na lista tradicional (compatibilidade)
-        self::$routes[] = $routeData;
-
-        // === OTIMIZAÇÕES INTEGRADAS ===
-
-        $key = self::createRouteKey($method, $path);
-
-        $optimizedRoute = [
-            'method' => $method,
-            'path' => $path,
-            'pattern' => $compiled['pattern'],
-            'parameters' => $compiled['parameters'],
-            'handler' => $resolvedHandler, // Usar handler resolvido
-            'metadata' => $metadata,
-            'middlewares' => $routeData['middlewares'],
-            'has_parameters' => count($compiled['parameters']) > 0,
-            'group_prefix' => self::$current_group_prefix
-        ];
-
-        // Armazena na estrutura otimizada
-        self::$preCompiledRoutes[$key] = $optimizedRoute;
-
-        // Indexa por método para busca mais rápida
-        if (!isset(self::$routesByMethod[$method])) {
-            self::$routesByMethod[$method] = [];
-        }
-        self::$routesByMethod[$method][$key] = $optimizedRoute;
-
-        // Cache no RouteCache
-        RouteCache::set($key, $optimizedRoute);
-
-        // Memory management integration
-        $memoryManager = self::getMemoryManager();
-        $memoryManager->trackRouteUsage($key);
-        $memoryManager->checkMemoryUsage();
     }
 
     /**
-     * Identifica rota de forma otimizada (método principal).
+     * Identifica a rota que casa com o método e o path.
      */
     public static function identify(string $method, ?string $path = null): ?array
     {
@@ -339,196 +206,29 @@ class Router
             $path = self::DEFAULT_PATH;
         }
 
-        $startTime = microtime(true);
-
-        // 1. Tenta primeiro por grupos otimizados
-        $route = self::identifyByGroup($method, $path);
-
-        if ($route) {
-            self::updateStats('identify_group_hit', $startTime);
-            return $route;
-        }
-
-        // 2. Busca otimizada global
-        $route = self::identifyOptimized($method, $path);
-
-        if ($route) {
-            self::updateStats('identify_optimized_hit', $startTime);
-            return $route;
-        }
-
-        // 3. Fallback para busca tradicional (compatibilidade)
-        $route = self::identifyTraditional($method, $path);
-
-        if ($route) {
-            self::updateStats('identify_traditional_hit', $startTime);
-        } else {
-            self::updateStats('identify_miss', $startTime);
-        }
-
-        return $route;
-    }
-
-    /**
-     * Identificação otimizada por grupos.
-     */
-    public static function identifyByGroup(string $method, string $path): ?array
-    {
-        $startTime = microtime(true);
-
-        // Verifica cache de matching de prefixos
-        $cacheKey = $method . ':' . $path;
-        if (isset(self::$prefixMatchCache[$cacheKey])) {
-            $cachedPrefix = self::$prefixMatchCache[$cacheKey];
-            if ($cachedPrefix && isset(self::$groupIndex[$cachedPrefix])) {
-                $route = self::findRouteInGroup($cachedPrefix, $method, $path);
-
-                // Atualiza estatísticas de acesso
-                if ($route && isset(self::$groupStats[$cachedPrefix])) {
-                    self::updateGroupStats($cachedPrefix, $startTime, true);
-                }
-
-                return $route;
-            }
-        }
-
-        // Busca o grupo mais específico que coincide com o path
-        $matchingPrefix = self::findMatchingPrefix($path);
-
-        if ($matchingPrefix) {
-            // Cache o resultado do matching
-            self::$prefixMatchCache[$cacheKey] = $matchingPrefix;
-            self::limitCacheSize(self::$prefixMatchCache);
-            $route = self::findRouteInGroup($matchingPrefix, $method, $path);
-
-            // Atualiza estatísticas de acesso
-            if ($route && isset(self::$groupStats[$matchingPrefix])) {
-                self::updateGroupStats($matchingPrefix, $startTime, false);
-            }
-
-            return $route;
-        }
-
-        return null;
-    }
-
-    /**
-     * Extrai parâmetros correspondentes de uma rota com base nos matches do regex
-     * @param array $parameters Array de informações dos parâmetros da rota
-     * @param array $matches Array de matches do preg_match
-     * @return array Array associativo com os parâmetros extraídos
-     */
-    private static function extractMatchedParameters(array $parameters, array $matches): array
-    {
-        $params = [];
-
-        // Começa do índice 1 pois o índice 0 contém o match completo
-        for ($i = 1; $i < count($matches); $i++) {
-            if (isset($parameters[$i - 1])) {
-                $paramInfo = $parameters[$i - 1];
-                // Verifica se é um array com informações do parâmetro ou apenas o nome
-                if (is_array($paramInfo) && isset($paramInfo['name'])) {
-                    $params[$paramInfo['name']] = $matches[$i];
-                } else {
-                    $params[$paramInfo] = $matches[$i];
-                }
-            }
-        }
-
-        return $params;
-    }
-
-    /**
-     * Tenta fazer match de uma rota com pattern contra um path
-     * @param array $route A rota a ser testada
-     * @param string $path O path a ser testado
-     * @return array|null A rota com parâmetros extraídos ou null se não houver match
-     */
-    private static function matchRoutePattern(array $route, string $path): ?array
-    {
-        // Verifica se o pattern está disponível e é válido
-        $pattern = $route['pattern'] ?? null;
-        if ($pattern === null || $pattern === '') {
-            return null;
-        }
-
-        // Pattern validation is now done during route registration, not here
-        // This optimization removes the expensive validation on every match
-        if (preg_match($pattern, $path, $matches)) {
-            // Extrai os parâmetros correspondentes se houver
-            $parameters = $route['parameters'] ?? [];
-            if (count($parameters) > 0 && count($matches) > 1) {
-                $route['matched_params'] = self::extractMatchedParameters($parameters, $matches);
-            }
-            return $route;
-        }
-
-        return null;
-    }
-
-    /**
-     * Identificação otimizada global (versão melhorada).
-     */
-    private static function identifyOptimized(string $method, string $path): ?array
-    {
-        $exactKey = self::createRouteKey($method, $path);
-
-        // 1. Verifica cache de exact matches primeiro (O(1))
-        if (isset(self::$exactMatchCache[$exactKey])) {
-            return self::$exactMatchCache[$exactKey];
-        }
-
-        // 2. Verifica RouteCache (O(1))
-        $cachedRoute = RouteCache::get($exactKey);
-        if ($cachedRoute !== null) {
-            self::$exactMatchCache[$exactKey] = $cachedRoute;
-            self::limitCacheSize(self::$exactMatchCache);
-            return $cachedRoute;
-        }
-
-        // 3. Busca apenas nas rotas do método específico
-        if (!isset(self::$routesByMethod[$method])) {
-            return null;
-        }
-
-        // TRAILING SLASH NORMALIZATION: Normalizar path para comparação
         $normalizedPath = self::normalizePathForMatching($path);
 
-        // 4. OTIMIZAÇÃO: Separar rotas estáticas das dinâmicas
-        $staticRoutes = [];
-        $dynamicRoutes = [];
-
-        foreach (self::$routesByMethod[$method] as $route) {
-            // Verifica se a rota tem parâmetros usando verificação defensiva
-            $hasParameters = isset($route['has_parameters']) ? $route['has_parameters'] : (isset($route['parameters']) && count($route['parameters']) > 0);
-
-            if (!$hasParameters) {
-                $staticRoutes[] = $route;
-            } else {
-                $dynamicRoutes[] = $route;
+        // 1. Match estático exato (com normalização de trailing slash).
+        foreach (self::$routes as $route) {
+            if ($route['method'] !== $method) {
+                continue;
             }
-        }
 
-        // 5. Primeiro busca em rotas estáticas (mais rápido)
-        // Com suporte a trailing slash normalization
-        foreach ($staticRoutes as $route) {
-            $normalizedRoutePath = self::normalizePathForMatching($route['path']);
-
-            if ($normalizedRoutePath === $normalizedPath) {
-                self::$exactMatchCache[$exactKey] = $route;
-                self::limitCacheSize(self::$exactMatchCache);
+            $routePath = is_string($route['path']) ? $route['path'] : self::DEFAULT_PATH;
+            if (self::normalizePathForMatching($routePath) === $normalizedPath) {
                 return $route;
             }
         }
 
-        // 6. OTIMIZAÇÃO PARA PARÂMETROS: Pattern matching melhorado
-        foreach ($dynamicRoutes as $route) {
-            $matchedRoute = self::matchRoutePattern($route, $path);
-            if ($matchedRoute !== null) {
-                // Cache para próximas consultas idênticas
-                self::$exactMatchCache[$exactKey] = $matchedRoute;
-                self::limitCacheSize(self::$exactMatchCache);
-                return $matchedRoute;
+        // 2. Match dinâmico (parâmetros).
+        foreach (self::$routes as $route) {
+            if ($route['method'] !== $method) {
+                continue;
+            }
+
+            $matched = self::matchRoutePattern($route, $path);
+            if ($matched !== null) {
+                return $matched;
             }
         }
 
@@ -536,451 +236,19 @@ class Router
     }
 
     /**
-     * Identificação tradicional (fallback para compatibilidade).
-     */
-    private static function identifyTraditional(string $method, string $path): ?array
-    {
-        // Filter routes based on method
-        $routes = array_filter(
-            self::$routes,
-            function ($route) use ($method) {
-                return $route['method'] === $method;
-            }
-        );
-
-        if (count($routes) === 0) {
-            return null;
-        }
-
-        // 1. Tenta encontrar rota estática (exata)
-        foreach ($routes as $route) {
-            if ($route['path'] === $path) {
-                return $route;
-            }
-        }
-
-        // 2. Tenta encontrar rota dinâmica (com parâmetros)
-        foreach ($routes as $route) {
-            // Usa o pattern pré-compilado se disponível
-            if (isset($route['pattern']) && $route['pattern'] !== null && is_string($route['pattern'])) {
-                $matchedRoute = self::matchRoutePattern($route, $path);
-                if ($matchedRoute !== null) {
-                    return $matchedRoute;
-                }
-            } else {
-                // Fallback para rotas sem pattern pré-compilado (compatibilidade)
-                $routePath = is_string($route['path']) ? $route['path'] : '';
-                if ($routePath === self::DEFAULT_PATH) {
-                    if ($path === self::DEFAULT_PATH) {
-                        return $route;
-                    }
-                } else {
-                    // Apenas rotas estáticas simples
-                    $hasColon = str_contains($routePath, ':');
-                    $hasBrace = str_contains($routePath, '{');
-                    if (!$hasColon && !$hasBrace) {
-                        if ($routePath === $path) {
-                            return $route;
-                        }
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Métodos auxiliares para otimizações
-     */
-    private static function createRouteKey(string $method, string $path): string
-    {
-        return $method . '::' . $path;
-    }
-
-    /**
-     * Mantém um cache de URL dentro de um limite fixo, descartando as entradas
-     * mais antigas (ordem de inserção). Evita crescimento sem limite por URL
-     * concreta em workers persistentes (SPEC-046).
-     *
-     * @param array<string, mixed> $cache
-     */
-    private static function limitCacheSize(array &$cache): void
-    {
-        if (count($cache) > self::MAX_CACHE_ENTRIES) {
-            $cache = array_slice($cache, -self::MAX_CACHE_ENTRIES, null, true);
-        }
-    }
-
-    /**
-     * Normaliza path para matching com trailing slash opcional
-     * Permite que /users e /users/ sejam tratados como equivalentes
+     * Normaliza um path para comparação (remove trailing slash, exceto na raiz).
      */
     private static function normalizePathForMatching(string $path): string
     {
-        // Remove trailing slash, exceto para root path
-        if ($path === '/') {
-            return '/';
+        if ($path !== '/' && $path !== '' && str_ends_with($path, '/')) {
+            return rtrim($path, '/');
         }
 
-        return rtrim($path, '/');
-    }
-
-    private static function normalizePrefix(string $prefix): string
-    {
-        if ($prefix === '' || $prefix === '/') {
-            return '/';
-        }
-
-        $prefix = '/' . trim($prefix, '/');
-        $normalized = preg_replace('/\/+/', '/', $prefix);
-        return $normalized !== null ? $normalized : $prefix;
-    }
-
-    private static function findMatchingPrefix(string $path): ?string
-    {
-        foreach (self::$sortedPrefixes as $prefix) {
-            if (str_starts_with($path, $prefix)) {
-                return $prefix;
-            }
-        }
-        return null;
-    }
-
-    private static function findRouteInGroup(
-        string $prefix,
-        string $method,
-        string $path
-    ): ?array {
-        if (!isset(self::$groupIndex[$prefix])) {
-            return null;
-        }
-
-        $groupRoutes = self::$groupIndex[$prefix];
-
-        if (!isset($groupRoutes[$method])) {
-            return null;
-        }
-
-        foreach ($groupRoutes[$method] as $route) {
-            // Exact match primeiro
-            if ($route['path'] === $path) {
-                return self::enrichRouteWithGroupMiddlewares($route, $prefix);
-            }
-        }
-
-        // Pattern matching para rotas com parâmetros
-        foreach ($groupRoutes[$method] as $route) {
-            $matchedRoute = self::matchRoutePattern($route, $path);
-            if ($matchedRoute !== null) {
-                return self::enrichRouteWithGroupMiddlewares($matchedRoute, $prefix);
-            }
-        }
-
-        return null;
-    }
-
-    private static function enrichRouteWithGroupMiddlewares(array $route, string $prefix): array
-    {
-        if (isset(self::$groupMiddlewares[$prefix])) {
-            $groupMiddlewares = self::$groupMiddlewares[$prefix];
-            $route['middlewares'] = array_merge($groupMiddlewares, $route['middlewares'] ?? []);
-        }
-        return $route;
-    }
-
-    private static function updateGroupIndex(string $prefix): void
-    {
-        $routes = self::getRoutesByPrefix($prefix);
-
-        if (!isset(self::$groupIndex[$prefix])) {
-            self::$groupIndex[$prefix] = [];
-        }
-
-        foreach ($routes as $route) {
-            $method = $route['method'];
-            if (!isset(self::$groupIndex[$prefix][$method])) {
-                self::$groupIndex[$prefix][$method] = [];
-            }
-            self::$groupIndex[$prefix][$method][] = $route;
-        }
-    }
-
-    private static function updateSortedPrefixes(): void
-    {
-        self::$sortedPrefixes = array_keys(self::$groupIndex);
-
-        usort(
-            self::$sortedPrefixes,
-            function ($a, $b) {
-                return strlen($b) - strlen($a);
-            }
-        );
-    }
-
-    private static function getRoutesByPrefix(string $prefix): array
-    {
-        $routes = [];
-
-        foreach (self::$preCompiledRoutes as $route) {
-            if (str_starts_with($route['path'], $prefix)) {
-                $routes[] = $route;
-            }
-        }
-
-        return $routes;
-    }
-
-    private static function updateStats(string $key, float $startTime): void
-    {
-        $time = (microtime(true) - $startTime) * 1000;
-
-        if (!isset(self::$stats[$key])) {
-            self::$stats[$key] = ['count' => 0, 'total_time' => 0, 'avg_time' => 0];
-        }
-
-        self::$stats[$key]['count']++;
-        self::$stats[$key]['total_time'] += $time;
-        self::$stats[$key]['avg_time'] = self::$stats[$key]['total_time'] / self::$stats[$key]['count'];
+        return $path;
     }
 
     /**
-     * Pré-aquece caches (método público para uso após registrar rotas).
-     */
-    public static function warmupCache(): void
-    {
-        RouteCache::warmup(self::$routes);
-
-        // Pré-compila todas as rotas não compiladas
-        foreach (self::$routes as $route) {
-            $method = is_string($route['method']) ? $route['method'] : 'GET';
-            $path = is_string($route['path']) ? $route['path'] : '/';
-
-            $key = self::createRouteKey($method, $path);
-            if (!isset(self::$preCompiledRoutes[$key])) {
-                $compiled = RouteCache::compilePattern($path);
-
-                $optimizedRoute = [
-                    'method' => $route['method'],
-                    'path' => $route['path'],
-                    'pattern' => $compiled['pattern'],
-                    'parameters' => $compiled['parameters'],
-                    'handler' => $route['handler'],
-                    'metadata' => $route['metadata'] ?? [],
-                    'middlewares' => $route['middlewares'] ?? [],
-                    'has_parameters' => count($compiled['parameters']) > 0
-                ];
-
-                self::$preCompiledRoutes[$key] = $optimizedRoute;
-
-                if (!isset(self::$routesByMethod[$route['method']])) {
-                    self::$routesByMethod[$route['method']] = [];
-                }
-                self::$routesByMethod[$route['method']][$key] = $optimizedRoute;
-            }
-        }
-
-        // Aquece grupos
-        self::warmupGroups();
-    }
-
-    /**
-     * WarmupGroups method
-     */
-    public static function warmupGroups(array $prefixes = []): void
-    {
-        if (count($prefixes) === 0) {
-            $prefixes = array_keys(self::$groupIndex);
-        }
-
-        foreach ($prefixes as $prefix) {
-            self::findMatchingPrefix($prefix);
-        }
-    }
-
-    /**
-     * Obtém estatísticas de performance.
-     */
-    public static function getStats(): array
-    {
-        $routeStats = self::$stats;
-        $routeStats['cache_stats'] = RouteCache::getStats();
-        $routeStats['total_routes'] = count(self::$routes);
-        $routeStats['compiled_routes'] = count(self::$preCompiledRoutes);
-        $routeStats['groups'] = self::$stats['groups'] ?? [];
-
-        return $routeStats;
-    }
-
-    /**
-     * Limpa todos os caches e estatísticas.
-     */
-    public static function clearCache(): void
-    {
-        self::$preCompiledRoutes = [];
-        self::$routesByMethod = [];
-        self::$exactMatchCache = [];
-        self::$groupIndex = [];
-        self::$sortedPrefixes = [];
-        self::$prefixMatchCache = [];
-        self::$stats = [];
-        RouteCache::clear();
-    }
-
-    /**
-     * Métodos de compatibilidade (mantidos para não quebrar código existente)
-     */
-
-    public static function __callStatic(string $method, array $args): mixed
-    {
-        if (in_array(strtoupper($method), self::$httpMethodsAccepted, true)) {
-            $path = array_shift($args);
-            self::add(strtoupper($method), $path, ...$args);
-            return null;
-        }
-
-        if (method_exists(self::class, $method)) {
-            return self::{$method}(...$args);
-        }
-        throw new BadMethodCallException("Method {$method} does not exist in " . self::class);
-    }
-
-    /**
-     * Convert to string
-     */
-    public static function toString(): string
-    {
-        $output = '';
-        foreach (self::$routes as $route) {
-            $method = is_string($route['method']) ? $route['method'] : 'UNKNOWN';
-            $path = is_string($route['path']) ? $route['path'] : '/';
-            $handlerType = is_callable($route['handler']) ? 'Callable' : 'Not Callable';
-
-            $output .= sprintf(
-                "%s %s => %s\n",
-                $method,
-                $path,
-                $handlerType
-            );
-        }
-        return $output;
-    }
-
-    /**
-     * Get routes
-     */
-    public static function getRoutes(): array
-    {
-        return self::$routes;
-    }
-
-    /**
-     * Registra uma rota GET.
-     */
-    public static function get(
-        string $path,
-        callable|array $handler,
-        array $metadata = [],
-        callable ...$middlewares
-    ): void {
-        self::add('GET', $path, $handler, $metadata, ...$middlewares);
-    }
-
-    /**
-     * Registra uma rota POST.
-     */
-    public static function post(
-        string $path,
-        callable|array $handler,
-        array $metadata = [],
-        callable ...$middlewares
-    ): void {
-        self::add('POST', $path, $handler, $metadata, ...$middlewares);
-    }
-
-    /**
-     * Registra uma rota PUT.
-     */
-    public static function put(
-        string $path,
-        callable|array $handler,
-        array $metadata = [],
-        callable ...$middlewares
-    ): void {
-        self::add('PUT', $path, $handler, $metadata, ...$middlewares);
-    }
-
-    /**
-     * Registra uma rota DELETE.
-     */
-    public static function delete(
-        string $path,
-        callable|array $handler,
-        array $metadata = [],
-        callable ...$middlewares
-    ): void {
-        self::add('DELETE', $path, $handler, $metadata, ...$middlewares);
-    }
-
-    /**
-     * Registra uma rota PATCH.
-     */
-    public static function patch(
-        string $path,
-        callable|array $handler,
-        array $metadata = [],
-        callable ...$middlewares
-    ): void {
-        self::add('PATCH', $path, $handler, $metadata, ...$middlewares);
-    }
-
-    /**
-     * Registra uma rota OPTIONS.
-     */
-    public static function options(
-        string $path,
-        callable|array $handler,
-        array $metadata = [],
-        callable ...$middlewares
-    ): void {
-        self::add('OPTIONS', $path, $handler, $metadata, ...$middlewares);
-    }
-
-    /**
-     * Registra uma rota HEAD.
-     */
-    public static function head(
-        string $path,
-        callable|array $handler,
-        array $metadata = [],
-        callable ...$middlewares
-    ): void {
-        self::add('HEAD', $path, $handler, $metadata, ...$middlewares);
-    }
-
-    /**
-     * Registra uma rota para todos os métodos HTTP.
-     */
-    public static function any(
-        string $path,
-        callable|array $handler,
-        array $metadata = [],
-        callable ...$middlewares
-    ): void {
-        foreach (self::$httpMethodsAccepted as $method) {
-            self::add($method, $path, $handler, $metadata, ...$middlewares);
-        }
-    }
-
-    /**
-     * Get httpMethodsAccepted
-     */
-    public static function getHttpMethodsAccepted(): array
-    {
-        return self::$httpMethodsAccepted;
-    }
-
-    /**
-     * Remove closures, objetos e recursos de arrays recursivamente
+     * Remove closures, objetos e recursos de arrays recursivamente.
      */
     private static function sanitizeForJson(mixed $value): mixed
     {
@@ -992,154 +260,101 @@ class Router
                 } elseif (is_scalar($v) || is_null($v)) {
                     $out[$k] = $v;
                 } elseif (is_object($v)) {
-                    if ($v instanceof \stdClass) {
-                        $out[$k] = self::sanitizeForJson((array)$v);
-                    } else {
-                        $out[$k] = '[object]';
-                    }
+                    $out[$k] = $v instanceof \stdClass
+                        ? self::sanitizeForJson((array) $v)
+                        : '[object]';
                 } elseif (is_resource($v)) {
                     $out[$k] = '[resource]';
                 } else {
                     $out[$k] = '[unserializable]';
                 }
             }
+
             return $out;
         }
+
         if (is_scalar($value) || is_null($value)) {
             return $value;
         }
         if (is_object($value)) {
-            if ($value instanceof \stdClass) {
-                return self::sanitizeForJson((array)$value);
-            }
-            return '[object]';
+            return $value instanceof \stdClass ? self::sanitizeForJson((array) $value) : '[object]';
         }
         if (is_resource($value)) {
             return '[resource]';
         }
+
         return '[unserializable]';
     }
 
     /**
-     * Obtém estatísticas dos grupos registrados
+     * Extrai parâmetros correspondentes de uma rota.
+     *
+     * @param array<int, array<string, mixed>> $parameters
+     * @param array<int, string> $matches
+     * @return array<string, string>
      */
-    public static function getGroupStats(): array
+    private static function extractMatchedParameters(array $parameters, array $matches): array
     {
-        $stats = [];
+        $params = [];
 
-        foreach (self::$groupStats as $prefix => $data) {
-            $stats[$prefix] = [
-                'routes_count' => $data['routes_count'],
-                'registration_time_ms' => round($data['registration_time_ms'], 3),
-                'access_count' => $data['access_count'],
-                'avg_access_time_ms' => $data['access_count'] > 0
-                    ? round($data['total_access_time_ms'] / $data['access_count'], 6)
-                    : 0,
-                'has_middlewares' => $data['has_middlewares'],
-                'cache_hit_ratio' => $data['access_count'] > 0
-                    ? ($data['cache_hits'] / $data['access_count'])
-                    : 0
-            ];
+        for ($i = 1; $i < count($matches); $i++) {
+            $paramInfo = $parameters[$i - 1] ?? null;
+            if (is_array($paramInfo) && isset($paramInfo['name']) && is_string($paramInfo['name'])) {
+                $params[$paramInfo['name']] = $matches[$i];
+            }
         }
 
-        return $stats;
+        return $params;
     }
 
     /**
-     * Atualiza estatísticas de acesso de um grupo
+     * Tenta casar uma rota (via pattern) contra um path.
+     *
+     * @param array<string, mixed> $route
+     * @return array<string, mixed>|null
      */
-    private static function updateGroupStats(
-        string $prefix,
-        float $startTime,
-        bool $cacheHit
-    ): void {
-        if (!isset(self::$groupStats[$prefix])) {
-            return;
-        }
-
-        $accessTime = (microtime(true) - $startTime) * 1000;
-
-        self::$groupStats[$prefix]['access_count']++;
-        self::$groupStats[$prefix]['total_access_time_ms'] += $accessTime;
-        self::$groupStats[$prefix]['last_access'] = microtime(true);
-
-        if ($cacheHit) {
-            self::$groupStats[$prefix]['cache_hits']++;
-        }
-    }
-
-    /**
-     * Benchmark de acesso a rotas de um grupo específico
-     */
-    public static function benchmarkGroupAccess(string $prefix, int $iterations = 1000): array
+    private static function matchRoutePattern(array $route, string $path): ?array
     {
-        // Verifica se o grupo existe
-        if (!isset(self::$groupStats[$prefix])) {
-            throw new \InvalidArgumentException("Group prefix '{$prefix}' not found");
+        $pattern = $route['pattern'] ?? null;
+        if (!is_string($pattern) || $pattern === '') {
+            return null;
         }
 
-        // Obtém rotas do grupo
-        $groupRoutes = self::getRoutesByPrefix($prefix);
-        if (count($groupRoutes) === 0) {
-            throw new \InvalidArgumentException("No routes found for group '{$prefix}'");
+        if (preg_match($pattern, $path, $matches) === 1) {
+            $parameters = $route['parameters'] ?? [];
+            if (is_array($parameters) && count($parameters) > 0 && count($matches) > 1) {
+                $route['matched_params'] = self::extractMatchedParameters($parameters, $matches);
+            }
+
+            return $route;
         }
 
-        // Seleciona uma rota de teste
-        $testRoute = $groupRoutes[0];
-        $method = $testRoute['method'];
-
-        $start = microtime(true);
-
-        for ($i = 0; $i < $iterations; $i++) {
-            self::identifyByGroup($method, $testRoute['path']);
-        }
-
-        $end = microtime(true);
-        $totalTime = ($end - $start) * 1000;
-
-        return [
-            'group_prefix' => $prefix,
-            'test_route' => $testRoute['path'],
-            'method' => $method,
-            'iterations' => $iterations,
-            'total_time_ms' => round($totalTime, 3),
-            'avg_time_microseconds' => round(($totalTime / $iterations) * 1000, 3),
-            'ops_per_second' => round($iterations / ($end - $start), 0),
-            'group_stats' => self::$groupStats[$prefix]
-        ];
+        return null;
     }
 
     /**
-     * Limpa todas as rotas, caches e estatísticas
+     * Normaliza um prefixo de grupo.
      */
-    public static function clear(): void
+    private static function normalizePrefix(string $prefix): string
     {
-        self::$routes = [];
-        self::$routesByMethod = [];
-        self::$exactMatchCache = [];
-        self::$groupIndex = [];
-        self::$prefixMatchCache = [];
-        self::$sortedPrefixes = [];
-        self::$stats = [];
-        self::$groupStats = [];
-        self::$groupMiddlewares = [];
-        self::$current_group_prefix = '';
-        self::$preCompiledRoutes = [];
+        if ($prefix === '' || $prefix === '/') {
+            return '/';
+        }
 
-        // Limpa cache do RouteCache também
-        RouteCache::clear();
+        $prefix = '/' . trim($prefix, '/');
+        $normalized = preg_replace('/\/+/', '/', $prefix);
+
+        return $normalized !== null ? $normalized : $prefix;
     }
 
     /**
-     * Otimiza processamento de path
+     * Aplica o prefixo de grupo e normaliza o path.
      */
     private static function optimizePathProcessing(string $path): string
     {
-        // Aplica prefixo de grupo se houver
         if (self::$current_group_prefix !== '' && self::$current_group_prefix !== '/') {
             if (!str_starts_with($path, self::$current_group_prefix)) {
                 $path = self::$current_group_prefix . $path;
-                // OTIMIZAÇÃO: regex apenas quando necessário
                 if (str_contains($path, '//')) {
                     $normalizedPath = preg_replace('/\/+/', '/', $path);
                     $path = $normalizedPath !== null ? $normalizedPath : $path;
@@ -1147,7 +362,6 @@ class Router
             }
         }
 
-        // Ensure the path starts with a slash
         if ($path !== '' && $path[0] !== '/') {
             $path = '/' . $path;
         }
@@ -1156,7 +370,9 @@ class Router
     }
 
     /**
-     * Obtém middlewares de grupo para path (lazy loading)
+     * Obtém os middlewares de grupo aplicáveis a um path.
+     *
+     * @return array<int, callable>
      */
     private static function getGroupMiddlewaresForPath(string $path): array
     {
@@ -1174,14 +390,444 @@ class Router
         return $groupMiddlewares;
     }
 
+    // ======================================================================
+    // Compilação de padrões (essencial)
+    // ======================================================================
+
     /**
-     * Get or create route memory manager instance
+     * Compila um path em regex + lista de parâmetros.
+     *
+     * @return array{pattern: string|null, parameters: array<int, array<string, mixed>>}
      */
-    private static function getMemoryManager(): RouteMemoryManager
+    public static function compilePattern(string $path): array
     {
-        if (self::$memoryManager === null) {
-            self::$memoryManager = new RouteMemoryManager();
+        if (self::isStaticRoute($path)) {
+            return ['pattern' => null, 'parameters' => []];
         }
-        return self::$memoryManager;
+
+        $pattern = $path;
+        $parameters = [];
+        $position = 0;
+
+        $pattern = self::processRegexBlocks($pattern, $parameters, $position);
+        $pattern = self::processBraceParameters($pattern, $parameters, $position);
+        $pattern = self::processNamedParameters($pattern, $parameters, $position);
+
+        $compiledPattern = self::finalizePattern($pattern);
+
+        return ['pattern' => $compiledPattern, 'parameters' => $parameters];
+    }
+
+    public static function isStaticRoute(string $path): bool
+    {
+        return strpos($path, ':') === false && strpos($path, '{') === false;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $parameters
+     */
+    private static function processRegexBlocks(
+        ?string $pattern,
+        array &$parameters,
+        int &$position
+    ): ?string {
+        if ($pattern === null) {
+            return '';
+        }
+
+        return preg_replace_callback(
+            '/\{([^{}]+(?:\{[^{}]*\}[^{}]*)*)\}/',
+            function ($matches) use (&$position, &$parameters) {
+                return self::processRegexBlock($matches[1], $parameters, $position);
+            },
+            $pattern
+        );
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $parameters
+     */
+    private static function processRegexBlock(
+        string $content,
+        array &$parameters,
+        int &$position
+    ): string {
+        if (strpos($content, '^') === false && strpos($content, '(') === false) {
+            return '{' . $content . '}';
+        }
+
+        $regex = self::removeRegexAnchors($content);
+
+        $groupCount = self::countCaptureGroups($regex);
+        self::registerAnonymousParameters($parameters, $position, $regex, $groupCount);
+
+        $position += $groupCount;
+
+        return $regex;
+    }
+
+    private static function removeRegexAnchors(string $regex): string
+    {
+        if ($regex !== '' && $regex[0] === '^') {
+            $regex = substr($regex, 1);
+        }
+
+        if ($regex !== '' && substr($regex, -1) === '$') {
+            if (preg_match('/\.[a-z]{2,4}\)?\$/', $regex) === 0) {
+                $regex = substr($regex, 0, -1);
+            }
+        }
+
+        return $regex;
+    }
+
+    private static function countCaptureGroups(string $regex): int
+    {
+        preg_match_all('/\([^?]/', $regex, $groups);
+
+        return count($groups[0]);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $parameters
+     */
+    private static function registerAnonymousParameters(
+        array &$parameters,
+        int $position,
+        string $regex,
+        int $count
+    ): void {
+        for ($i = 0; $i < $count; $i++) {
+            $parameters[] = [
+                'name' => '_anonymous_' . ($position + $i),
+                'position' => $position + $i,
+                'constraint' => $regex,
+                'type' => 'anonymous'
+            ];
+        }
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $parameters
+     */
+    private static function processBraceParameters(
+        ?string $pattern,
+        array &$parameters,
+        int &$position
+    ): ?string {
+        if ($pattern === null) {
+            return '';
+        }
+
+        return preg_replace_callback(
+            '/\{([a-zA-Z_][a-zA-Z0-9_]*)(?:<([^>]+)>)?\}/',
+            function ($matches) use (&$parameters, &$position) {
+                return self::processNamedParameter($matches, $parameters, $position);
+            },
+            $pattern
+        );
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $parameters
+     */
+    private static function processNamedParameters(
+        ?string $pattern,
+        array &$parameters,
+        int &$position
+    ): ?string {
+        if ($pattern === null) {
+            return '';
+        }
+
+        return preg_replace_callback(
+            '/:([a-zA-Z_][a-zA-Z0-9_]*)(?:<([^>]+)>)?/',
+            function ($matches) use (&$parameters, &$position) {
+                return self::processNamedParameter($matches, $parameters, $position);
+            },
+            $pattern
+        );
+    }
+
+    /**
+     * @param array<int, string> $matches
+     * @param array<int, array<string, mixed>> $parameters
+     */
+    private static function processNamedParameter(
+        array $matches,
+        array &$parameters,
+        int &$position
+    ): string {
+        $paramName = $matches[1];
+        $constraint = $matches[2] ?? '[^/]+';
+
+        $constraint = self::resolveConstraintShortcut($constraint);
+
+        if (!self::isRegexSafe($constraint)) {
+            throw new InvalidArgumentException(
+                "Unsafe regex pattern detected in route parameter '{$paramName}': {$constraint}"
+            );
+        }
+
+        $parameters[] = [
+            'name' => $paramName,
+            'position' => $position++,
+            'constraint' => $constraint
+        ];
+
+        return '(' . $constraint . ')';
+    }
+
+    private static function finalizePattern(?string $pattern): string
+    {
+        if ($pattern === null) {
+            $pattern = '';
+        }
+
+        $pattern = self::escapeDots($pattern);
+
+        if ($pattern !== '' && $pattern !== null) {
+            $normalizedPattern = preg_replace('#/+#', '/', $pattern);
+            $pattern = $normalizedPattern !== null ? $normalizedPattern : $pattern;
+        }
+
+        $pattern = rtrim($pattern ?? '', '/');
+
+        return '#^' . $pattern . '/?$#';
+    }
+
+    private static function escapeDots(?string $pattern): ?string
+    {
+        if ($pattern === null) {
+            return null;
+        }
+
+        return preg_replace_callback(
+            '/(\\.)(?![^(]*\\))/',
+            function ($matches) {
+                return '\\' . $matches[1];
+            },
+            $pattern
+        );
+    }
+
+    private static function resolveConstraintShortcut(string $constraint): string
+    {
+        return self::CONSTRAINT_SHORTCUTS[$constraint] ?? $constraint;
+    }
+
+    private static function isRegexSafe(string $pattern): bool
+    {
+        if (strlen($pattern) > 200) {
+            return false;
+        }
+
+        foreach (self::DANGEROUS_PATTERNS as $dangerous) {
+            if (strpos($pattern, $dangerous) !== false) {
+                return false;
+            }
+        }
+
+        if (preg_match('/\([^)]*[\*\+]\)[*+]/', $pattern) === 1) {
+            return false;
+        }
+
+        if (preg_match('/\([^)]*\|[^)]*\)[\*\+]/', $pattern) === 1 && substr_count($pattern, '|') > 5) {
+            return false;
+        }
+
+        if (substr_count($pattern, '|') > 10) {
+            return false;
+        }
+
+        try {
+            @preg_match('#' . $pattern . '#', '');
+
+            return preg_last_error() === PREG_NO_ERROR;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    // ======================================================================
+    // Verbos HTTP
+    // ======================================================================
+
+    /**
+     * @param callable|array $handler
+     * @param array<string, mixed> $metadata
+     */
+    public static function get(
+        string $path,
+        callable|array $handler,
+        array $metadata = [],
+        callable ...$middlewares
+    ): void {
+        self::add('GET', $path, $handler, $metadata, ...$middlewares);
+    }
+
+    /**
+     * @param callable|array $handler
+     * @param array<string, mixed> $metadata
+     */
+    public static function post(
+        string $path,
+        callable|array $handler,
+        array $metadata = [],
+        callable ...$middlewares
+    ): void {
+        self::add('POST', $path, $handler, $metadata, ...$middlewares);
+    }
+
+    /**
+     * @param callable|array $handler
+     * @param array<string, mixed> $metadata
+     */
+    public static function put(
+        string $path,
+        callable|array $handler,
+        array $metadata = [],
+        callable ...$middlewares
+    ): void {
+        self::add('PUT', $path, $handler, $metadata, ...$middlewares);
+    }
+
+    /**
+     * @param callable|array $handler
+     * @param array<string, mixed> $metadata
+     */
+    public static function delete(
+        string $path,
+        callable|array $handler,
+        array $metadata = [],
+        callable ...$middlewares
+    ): void {
+        self::add('DELETE', $path, $handler, $metadata, ...$middlewares);
+    }
+
+    /**
+     * @param callable|array $handler
+     * @param array<string, mixed> $metadata
+     */
+    public static function patch(
+        string $path,
+        callable|array $handler,
+        array $metadata = [],
+        callable ...$middlewares
+    ): void {
+        self::add('PATCH', $path, $handler, $metadata, ...$middlewares);
+    }
+
+    /**
+     * @param callable|array $handler
+     * @param array<string, mixed> $metadata
+     */
+    public static function options(
+        string $path,
+        callable|array $handler,
+        array $metadata = [],
+        callable ...$middlewares
+    ): void {
+        self::add('OPTIONS', $path, $handler, $metadata, ...$middlewares);
+    }
+
+    /**
+     * @param callable|array $handler
+     * @param array<string, mixed> $metadata
+     */
+    public static function head(
+        string $path,
+        callable|array $handler,
+        array $metadata = [],
+        callable ...$middlewares
+    ): void {
+        self::add('HEAD', $path, $handler, $metadata, ...$middlewares);
+    }
+
+    /**
+     * @param callable|array $handler
+     * @param array<string, mixed> $metadata
+     */
+    public static function any(
+        string $path,
+        callable|array $handler,
+        array $metadata = [],
+        callable ...$middlewares
+    ): void {
+        foreach (self::$httpMethodsAccepted as $method) {
+            self::add($method, $path, $handler, $metadata, ...$middlewares);
+        }
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function getHttpMethodsAccepted(): array
+    {
+        return self::$httpMethodsAccepted;
+    }
+
+    /**
+     * Retorna as rotas registradas.
+     */
+    public static function getRoutes(): array
+    {
+        return self::$routes;
+    }
+
+    /**
+     * Limpa todas as rotas e o estado de grupo.
+     */
+    public static function clear(): void
+    {
+        self::$routes = [];
+        self::$groupMiddlewares = [];
+        self::$current_group_prefix = '';
+    }
+
+    /**
+     * Converte a tabela de rotas em string legível.
+     */
+    public static function toString(): string
+    {
+        $output = '';
+        foreach (self::$routes as $route) {
+            $method = is_string($route['method']) ? $route['method'] : 'UNKNOWN';
+            $path = is_string($route['path']) ? $route['path'] : '/';
+            $handlerType = is_callable($route['handler']) ? 'Callable' : 'Not Callable';
+
+            $output .= sprintf(
+                "%s %s => %s\n",
+                $method,
+                $path,
+                $handlerType
+            );
+        }
+
+        return $output;
+    }
+
+    /**
+     * @param array<int, mixed> $args
+     */
+    public static function __callStatic(string $method, array $args): mixed
+    {
+        if (in_array(strtoupper($method), self::$httpMethodsAccepted, true)) {
+            $path = array_shift($args);
+            if (!is_string($path)) {
+                throw new InvalidArgumentException('Route path must be a string');
+            }
+            /** @phpstan-ignore-next-line Dynamic dispatch: args are validated by add(). */
+            self::add(strtoupper($method), $path, ...$args);
+
+            return null;
+        }
+
+        if (method_exists(self::class, $method)) {
+            /** @phpstan-ignore-next-line Dynamic method dispatch. */
+            return self::{$method}(...$args);
+        }
+
+        throw new BadMethodCallException("Method {$method} does not exist in " . self::class);
     }
 }

@@ -3,18 +3,18 @@
 namespace PivotPHP\Routing\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use PivotPHP\Routing\Router\RouteCache;
+use PivotPHP\Routing\Router\Router;
 
 class RouteCacheRegexTest extends TestCase
 {
     protected function setUp(): void
     {
-        RouteCache::clear();
+        Router::clear();
     }
 
     protected function tearDown(): void
     {
-        RouteCache::clear();
+        Router::clear();
     }
 
     /**
@@ -23,7 +23,7 @@ class RouteCacheRegexTest extends TestCase
     public function testBackwardCompatibilityWithSimpleParameters(): void
     {
         // Testa que a sintaxe antiga continua funcionando
-        $compiled = RouteCache::compilePattern('/users/:id');
+        $compiled = Router::compilePattern('/users/:id');
 
         $this->assertArrayHasKey('pattern', $compiled);
         $this->assertArrayHasKey('parameters', $compiled);
@@ -37,7 +37,7 @@ class RouteCacheRegexTest extends TestCase
      */
     public function testConstrainedParametersWithDigits(): void
     {
-        $compiled = RouteCache::compilePattern('/users/:id<\d+>');
+        $compiled = Router::compilePattern('/users/:id<\d+>');
 
         $this->assertEquals('#^/users/(\d+)/?$#', $compiled['pattern']);
         $this->assertCount(1, $compiled['parameters']);
@@ -50,7 +50,7 @@ class RouteCacheRegexTest extends TestCase
      */
     public function testMultipleConstrainedParameters(): void
     {
-        $compiled = RouteCache::compilePattern('/posts/:year<\d{4}>/:month<\d{2}>/:slug<[a-z0-9-]+>');
+        $compiled = Router::compilePattern('/posts/:year<\d{4}>/:month<\d{2}>/:slug<[a-z0-9-]+>');
 
         $this->assertEquals('#^/posts/(\d{4})/(\d{2})/([a-z0-9-]+)/?$#', $compiled['pattern']);
         $this->assertCount(3, $compiled['parameters']);
@@ -83,7 +83,7 @@ class RouteCacheRegexTest extends TestCase
         ];
 
         foreach ($shortcuts as $shortcut => $expectedRegex) {
-            $compiled = RouteCache::compilePattern("/test/:param<{$shortcut}>");
+            $compiled = Router::compilePattern("/test/:param<{$shortcut}>");
             $this->assertEquals("#^/test/({$expectedRegex})/?$#", $compiled['pattern']);
         }
     }
@@ -93,7 +93,7 @@ class RouteCacheRegexTest extends TestCase
      */
     public function testFullRegexSyntax(): void
     {
-        $compiled = RouteCache::compilePattern('/archive/{^(\d{4})/(\d{2})/(.+)$}');
+        $compiled = Router::compilePattern('/archive/{^(\d{4})/(\d{2})/(.+)$}');
 
         // As âncoras ^ e $ devem ser removidas do regex fornecido
         $this->assertEquals('#^/archive/(\d{4})/(\d{2})/(.+)/?$#', $compiled['pattern']);
@@ -104,7 +104,7 @@ class RouteCacheRegexTest extends TestCase
      */
     public function testMixedConstraintAndRegexSyntax(): void
     {
-        $compiled = RouteCache::compilePattern('/api/:version<v\d+>/{^/(.+\.json)$}');
+        $compiled = Router::compilePattern('/api/:version<v\d+>/{^/(.+\.json)$}');
 
         $this->assertStringContainsString('(v\d+)', $compiled['pattern']);
         $this->assertStringContainsString('/(.+\.json)$', $compiled['pattern']);
@@ -116,11 +116,11 @@ class RouteCacheRegexTest extends TestCase
     public function testStaticRouteDetection(): void
     {
         // Rotas estáticas não devem ter pattern
-        $compiled = RouteCache::compilePattern('/api/users');
+        $compiled = Router::compilePattern('/api/users');
 
         $this->assertNull($compiled['pattern']);
         $this->assertEmpty($compiled['parameters']);
-        $this->assertTrue(RouteCache::isStaticRoute('/api/users'));
+        $this->assertTrue(Router::isStaticRoute('/api/users'));
     }
 
     /**
@@ -128,9 +128,9 @@ class RouteCacheRegexTest extends TestCase
      */
     public function testDynamicRouteDetection(): void
     {
-        $this->assertFalse(RouteCache::isStaticRoute('/users/:id'));
-        $this->assertFalse(RouteCache::isStaticRoute('/users/:id<\d+>'));
-        $this->assertFalse(RouteCache::isStaticRoute('/files/{^(.+)$}'));
+        $this->assertFalse(Router::isStaticRoute('/users/:id'));
+        $this->assertFalse(Router::isStaticRoute('/users/:id<\d+>'));
+        $this->assertFalse(Router::isStaticRoute('/files/{^(.+)$}'));
     }
 
     /**
@@ -142,7 +142,7 @@ class RouteCacheRegexTest extends TestCase
         $this->expectExceptionMessage('Unsafe regex pattern detected');
 
         // Padrão perigoso com nested quantifiers
-        RouteCache::compilePattern('/test/:param<(\w+)*\w*>');
+        Router::compilePattern('/test/:param<(\w+)*\w*>');
     }
 
     /**
@@ -152,7 +152,7 @@ class RouteCacheRegexTest extends TestCase
     {
         $this->expectException(\InvalidArgumentException::class);
 
-        RouteCache::compilePattern('/test/:param<(.+)+>');
+        Router::compilePattern('/test/:param<(.+)+>');
     }
 
     /**
@@ -163,7 +163,7 @@ class RouteCacheRegexTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
 
         $pattern = '/test/:param<a|b|c|d|e|f|g|h|i|j|k|l>';
-        RouteCache::compilePattern($pattern);
+        Router::compilePattern($pattern);
     }
 
     /**
@@ -174,33 +174,18 @@ class RouteCacheRegexTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
 
         $longPattern = str_repeat('a', 201); // Mais de 200 caracteres
-        RouteCache::compilePattern("/test/:param<{$longPattern}>");
+        Router::compilePattern("/test/:param<{$longPattern}>");
     }
 
     /**
      * @test
      */
-    public function testCachingBehavior(): void
-    {
-        // Primeira compilação
-        $compiled1 = RouteCache::compilePattern('/users/:id<\d+>');
-
-        // Segunda compilação (deve vir do cache)
-        $compiled2 = RouteCache::compilePattern('/users/:id<\d+>');
-
-        $this->assertEquals($compiled1, $compiled2);
-
-        // Verifica estatísticas
-        $stats = RouteCache::getStats();
-        $this->assertEquals(1, $stats['compilations']); // Apenas uma compilação
-    }
-
     /**
      * @test
      */
     public function testParameterPositioning(): void
     {
-        $compiled = RouteCache::compilePattern('/api/:version<v\d+>/users/:id<\d+>/posts/:slug<slug>');
+        $compiled = Router::compilePattern('/api/:version<v\d+>/users/:id<\d+>/posts/:slug<slug>');
 
         $this->assertEquals('version', $compiled['parameters'][0]['name']);
         $this->assertEquals(0, $compiled['parameters'][0]['position']);
@@ -217,7 +202,7 @@ class RouteCacheRegexTest extends TestCase
      */
     public function testComplexFileExtensionPattern(): void
     {
-        $compiled = RouteCache::compilePattern('/files/:filename<[\w-]+>.:ext<jpg|png|gif|webp>');
+        $compiled = Router::compilePattern('/files/:filename<[\w-]+>.:ext<jpg|png|gif|webp>');
 
         $this->assertEquals('#^/files/([\w-]+)\.(jpg|png|gif|webp)/?$#', $compiled['pattern']);
         $this->assertCount(2, $compiled['parameters']);
@@ -230,7 +215,7 @@ class RouteCacheRegexTest extends TestCase
      */
     public function testEmailLikePattern(): void
     {
-        $compiled = RouteCache::compilePattern('/contact/:email<[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+>');
+        $compiled = Router::compilePattern('/contact/:email<[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+>');
 
         $this->assertStringContainsString('([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+)', $compiled['pattern']);
     }
@@ -240,7 +225,7 @@ class RouteCacheRegexTest extends TestCase
      */
     public function testISBNPattern(): void
     {
-        $compiled = RouteCache::compilePattern('/books/:isbn<\d{3}-\d{10}>');
+        $compiled = Router::compilePattern('/books/:isbn<\d{3}-\d{10}>');
 
         $this->assertEquals('#^/books/(\d{3}-\d{10})/?$#', $compiled['pattern']);
     }
@@ -250,8 +235,8 @@ class RouteCacheRegexTest extends TestCase
      */
     public function testOptionalTrailingSlash(): void
     {
-        $compiled1 = RouteCache::compilePattern('/users/:id<\d+>');
-        $compiled2 = RouteCache::compilePattern('/users/:id<\d+>/');
+        $compiled1 = Router::compilePattern('/users/:id<\d+>');
+        $compiled2 = Router::compilePattern('/users/:id<\d+>/');
 
         // Ambos devem produzir o mesmo pattern com /? opcional no final
         $this->assertEquals($compiled1['pattern'], $compiled2['pattern']);
@@ -261,29 +246,9 @@ class RouteCacheRegexTest extends TestCase
     /**
      * @test
      */
-    public function testAvailableShortcuts(): void
-    {
-        $shortcuts = RouteCache::getAvailableShortcuts();
-
-        $this->assertIsArray($shortcuts);
-        $this->assertArrayHasKey('int', $shortcuts);
-        $this->assertArrayHasKey('slug', $shortcuts);
-        $this->assertArrayHasKey('uuid', $shortcuts);
-        $this->assertArrayHasKey('date', $shortcuts);
-    }
-
     /**
      * @test
      */
-    public function testDebugInfoIncludesConstraints(): void
-    {
-        RouteCache::compilePattern('/users/:id<\d+>');
-        $debugInfo = RouteCache::getDebugInfo();
-
-        $this->assertArrayHasKey('constraint_shortcuts', $debugInfo);
-        $this->assertIsArray($debugInfo['constraint_shortcuts']);
-    }
-
     /**
      * @test
      */
@@ -292,7 +257,7 @@ class RouteCacheRegexTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
 
         // Regex inválido (parênteses não balanceados)
-        RouteCache::compilePattern('/test/:param<[abc(>');
+        Router::compilePattern('/test/:param<[abc(>');
     }
 
     /**
@@ -301,7 +266,7 @@ class RouteCacheRegexTest extends TestCase
     public function testMixedParameterTypes(): void
     {
         // Mistura de parâmetros com e sem constraints
-        $compiled = RouteCache::compilePattern('/api/:version/users/:id<\d+>/profile/:section');
+        $compiled = Router::compilePattern('/api/:version/users/:id<\d+>/profile/:section');
 
         $this->assertCount(3, $compiled['parameters']);
         $this->assertEquals('[^/]+', $compiled['parameters'][0]['constraint']); // Default

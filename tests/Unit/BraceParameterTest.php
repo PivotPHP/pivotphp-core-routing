@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace PivotPHP\Routing\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use PivotPHP\Routing\Router\RouteCache;
 use PivotPHP\Routing\Router\Router;
 
 /**
@@ -17,13 +16,13 @@ class BraceParameterTest extends TestCase
     protected function setUp(): void
     {
         Router::clear();
-        RouteCache::clear();
+        Router::clear();
     }
 
     protected function tearDown(): void
     {
         Router::clear();
-        RouteCache::clear();
+        Router::clear();
     }
 
     /**
@@ -31,7 +30,7 @@ class BraceParameterTest extends TestCase
      */
     public function testBraceParameterCompilesToNamedParameter(): void
     {
-        $compiled = RouteCache::compilePattern('/users/{id}');
+        $compiled = Router::compilePattern('/users/{id}');
 
         $this->assertEquals('#^/users/([^/]+)/?$#', $compiled['pattern']);
         $this->assertCount(1, $compiled['parameters']);
@@ -44,7 +43,7 @@ class BraceParameterTest extends TestCase
      */
     public function testBraceParameterWithConstraint(): void
     {
-        $compiled = RouteCache::compilePattern('/users/{id<\d+>}');
+        $compiled = Router::compilePattern('/users/{id<\d+>}');
 
         $this->assertEquals('#^/users/(\d+)/?$#', $compiled['pattern']);
         $this->assertCount(1, $compiled['parameters']);
@@ -57,7 +56,7 @@ class BraceParameterTest extends TestCase
      */
     public function testBraceParameterWithShortcutConstraint(): void
     {
-        $compiled = RouteCache::compilePattern('/posts/{slug<slug>}');
+        $compiled = Router::compilePattern('/posts/{slug<slug>}');
 
         $this->assertEquals('#^/posts/([a-z0-9-]+)/?$#', $compiled['pattern']);
         $this->assertEquals('slug', $compiled['parameters'][0]['name']);
@@ -113,7 +112,7 @@ class BraceParameterTest extends TestCase
      */
     public function testColonSyntaxStillWorks(): void
     {
-        $compiled = RouteCache::compilePattern('/users/:id');
+        $compiled = Router::compilePattern('/users/:id');
 
         $this->assertEquals('#^/users/([^/]+)/?$#', $compiled['pattern']);
     }
@@ -124,7 +123,7 @@ class BraceParameterTest extends TestCase
     public function testRegexBlockStillTakesPrecedenceOverBraceParameter(): void
     {
         // {^...$} continua sendo tratado como regex block, não como parâmetro {id}
-        $compiled = RouteCache::compilePattern('/archive/{^(\d{4})/(\d{2})$}');
+        $compiled = Router::compilePattern('/archive/{^(\d{4})/(\d{2})$}');
 
         $this->assertEquals('#^/archive/(\d{4})/(\d{2})/?$#', $compiled['pattern']);
         // Os grupos do regex block são registrados como parâmetros anônimos,

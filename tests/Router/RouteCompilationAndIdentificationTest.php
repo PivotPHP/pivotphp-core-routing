@@ -6,7 +6,6 @@ namespace PivotPHP\Tests\Routing;
 
 use PHPUnit\Framework\TestCase;
 use PivotPHP\Routing\Router\Router;
-use PivotPHP\Routing\Router\RouteCache;
 
 /**
  * Testes abrangentes para compilação e identificação de rotas
@@ -22,13 +21,13 @@ class RouteCompilationAndIdentificationTest extends TestCase
     protected function setUp(): void
     {
         Router::clear();
-        RouteCache::clear();
+        Router::clear();
     }
 
     protected function tearDown(): void
     {
         Router::clear();
-        RouteCache::clear();
+        Router::clear();
     }
 
     // ========================================
@@ -41,7 +40,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testCompileStaticRoute(): void
     {
-        $compiled = RouteCache::compilePattern('/users');
+        $compiled = Router::compilePattern('/users');
 
         $this->assertIsArray($compiled);
         $this->assertArrayHasKey('pattern', $compiled);
@@ -56,7 +55,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testCompileRouteWithSingleParameter(): void
     {
-        $compiled = RouteCache::compilePattern('/users/:id');
+        $compiled = Router::compilePattern('/users/:id');
 
         $this->assertEquals('#^/users/([^/]+)/?$#', $compiled['pattern']);
         $this->assertCount(1, $compiled['parameters']);
@@ -69,7 +68,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testCompileRouteWithMultipleParameters(): void
     {
-        $compiled = RouteCache::compilePattern('/users/:userId/posts/:postId');
+        $compiled = Router::compilePattern('/users/:userId/posts/:postId');
 
         $this->assertEquals('#^/users/([^/]+)/posts/([^/]+)/?$#', $compiled['pattern']);
         $this->assertCount(2, $compiled['parameters']);
@@ -83,7 +82,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testCompileRouteWithConstrainedParameters(): void
     {
-        $compiled = RouteCache::compilePattern('/users/:id<\d+>');
+        $compiled = Router::compilePattern('/users/:id<\d+>');
 
         $this->assertEquals('#^/users/(\d+)/?$#', $compiled['pattern']);
         $this->assertCount(1, $compiled['parameters']);
@@ -106,7 +105,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
         ];
 
         foreach ($testCases as $path => $expectedConstraint) {
-            $compiled = RouteCache::compilePattern($path);
+            $compiled = Router::compilePattern($path);
             $this->assertEquals($expectedConstraint, $compiled['parameters'][0]['constraint']);
         }
     }
@@ -117,7 +116,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testCompileRouteWithComplexConstraints(): void
     {
-        $compiled = RouteCache::compilePattern('/posts/:year<\d{4}>/:month<\d{2}>/:slug<[a-z0-9-]+>');
+        $compiled = Router::compilePattern('/posts/:year<\d{4}>/:month<\d{2}>/:slug<[a-z0-9-]+>');
 
         $this->assertEquals('#^/posts/(\d{4})/(\d{2})/([a-z0-9-]+)/?$#', $compiled['pattern']);
         $this->assertCount(3, $compiled['parameters']);
@@ -141,16 +140,13 @@ class RouteCompilationAndIdentificationTest extends TestCase
         $path = '/users/:id<\d+>';
 
         // Primeira compilação
-        $compiled1 = RouteCache::compilePattern($path);
+        $compiled1 = Router::compilePattern($path);
 
         // Segunda compilação deve vir do cache
-        $compiled2 = RouteCache::compilePattern($path);
+        $compiled2 = Router::compilePattern($path);
 
         $this->assertEquals($compiled1, $compiled2);
 
-        // Verifica estatísticas de cache
-        $stats = RouteCache::getStats();
-        $this->assertIsArray($stats);
     }
 
     // ========================================
@@ -400,7 +396,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
         $startTime = microtime(true);
 
         foreach ($patterns as $pattern) {
-            RouteCache::compilePattern($pattern);
+            Router::compilePattern($pattern);
         }
 
         $endTime = microtime(true);
@@ -471,7 +467,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
      */
     public function testCompileEmptyPathDefaultsToRoot(): void
     {
-        $compiled = RouteCache::compilePattern('');
+        $compiled = Router::compilePattern('');
 
         $this->assertIsArray($compiled);
         $this->assertArrayHasKey('pattern', $compiled);
@@ -484,7 +480,7 @@ class RouteCompilationAndIdentificationTest extends TestCase
     public function testCompileWithSpecialCharactersInConstraint(): void
     {
         // Testa constraint com caracteres especiais de regex
-        $compiled = RouteCache::compilePattern('/files/:name<[a-zA-Z0-9_\-\.]+>');
+        $compiled = Router::compilePattern('/files/:name<[a-zA-Z0-9_\-\.]+>');
 
         $this->assertIsArray($compiled);
         $this->assertArrayHasKey('pattern', $compiled);
@@ -540,25 +536,6 @@ class RouteCompilationAndIdentificationTest extends TestCase
      * @test
      * @group stats
      */
-    public function testGetStatsAfterOperations(): void
-    {
-        // Use named functions instead of closures to avoid serialization issues
-        $usersHandler = [$this, 'dummyHandler'];
-        $postsHandler = [$this, 'dummyHandler'];
-
-        Router::get('/users', $usersHandler);
-        Router::get('/posts/:id', $postsHandler);
-
-        Router::identify('GET', '/users');
-        Router::identify('GET', '/posts/123');
-
-        $stats = Router::getStats();
-
-        $this->assertIsArray($stats);
-        $this->assertArrayHasKey('total_routes', $stats);
-        $this->assertEquals(2, $stats['total_routes']);
-    }
-
     /**
      * Dummy handler for testing (avoids closure serialization issues)
      */

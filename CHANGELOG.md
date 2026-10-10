@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-10-10
+
+### Removed
+
+- **Sistema de cache** (`RouteCache`, `RouteMemoryManager`, `src/Cache/` com
+  `FileCacheStrategy`/`MemoryCacheStrategy`/`NullCacheStrategy`) — não tem efeito real no
+  PHP-FPM e adicionava estado estático global.
+- **Sistema de plugins** (`src/Plugins/`: `CachePlugin`, `MetricsPlugin`, `DebugPlugin`,
+  `PluginManager`, `AbstractPlugin`).
+- **Utilitário de serialização** (`src/Utils/SerializationCache.php`).
+- **Contratos** de cache/plugin (`CacheStrategyInterface`, `FileCacheInterface`,
+  `MemoryCacheInterface`, `PluginInterface`, `RouteMatcherInterface`, `RouterInterface`,
+  `RouteInterface`, `RouteCollectionInterface`).
+- **Métodos/estado de otimização** do `Router`: `warmupCache()`, `warmupGroups()`,
+  `getStats()`, `getGroupStats()`, `clearCache()`, `benchmarkGroupAccess()`,
+  `identifyByGroup()`, `identifyOptimized()`, `identifyTraditional()`, e os caches
+  estáticos (`$exactMatchCache`, `$prefixMatchCache`, `$routesByMethod`, `$preCompiledRoutes`,
+  `$groupIndex`, `$sortedPrefixes`, `$stats`, `$groupStats`).
+
+### Changed
+
+- `Router` simplificado: apenas **registra rotas, compila padrões e casa o path**
+  (`identify()` faz varredura linear).
+- `Router::compilePattern()` e `Router::isStaticRoute()` agora são públicos (utilitários).
+
+### Fixed
+
+- PHPStan nível 9: de 77 erros para **0** (SPEC-057).
+
 ## [1.2.2] - 2026-10-09
 
 ### Fixed

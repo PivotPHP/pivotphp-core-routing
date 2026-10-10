@@ -25,3 +25,13 @@ parameters:
         # Ignore unknown external classes (optional dependencies from pivotphp-core)
         - '#unknown class PivotPHP\\Core#'
         - '#Call to static method .+ on an unknown class PivotPHP\\Core#'
+
+        # Route handlers are intentionally typed callable|array (matching the
+        # PivotPHP\Core public API); the array-callable shape is validated and
+        # narrowed inside add() via CallableResolver.
+        - '#Method PivotPHP\\Routing\\Router\\Router::(add|get|post|put|delete|patch|options|head|any)\(\) has parameter \$handler with no value type specified in iterable type array#'
+
+        # Route data is intentionally returned as loose arrays (identify/getRoutes)
+        # to match the PivotPHP\Core consumer, whose phpstan config treats
+        # explicit array value types as "mixed" errors. See pivotphp-core/phpstan.neon.
+        - '#Method PivotPHP\\Routing\\Router\\Router::(identify|getRoutes)\(\) return type has no value type specified in iterable type array#'
