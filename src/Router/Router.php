@@ -793,10 +793,6 @@ class Router
     }
 
     /**
-     * @param callable|array $handler
-     * @param array<string, mixed> $metadata
-     */
-    /**
      * Registra múltiplas rotas para os mesmos handlers.
      *
      * @param array<int, string> $methods

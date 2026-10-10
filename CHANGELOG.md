@@ -18,6 +18,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`StaticFileManager`**:
   `registerDirectory()` e `register()` aceitam parâmetro opcional `?Router $router = null`, permitindo registrar arquivos estáticos diretamente na instância de roteador desejada.
 
+### Added
+
+- **`Router::match($methods, $path, $handler, ...)`**: registra o mesmo handler para vários métodos HTTP.
+- **`Router::allowedMethods($path)`** agora é método de instância.
+
+### Fixed
+
+- **Arquivos estáticos em mais de um router** (SPEC-076): a deduplicação do `StaticFileManager` era global,
+  então registrar a mesma pasta num segundo router (ex.: uma segunda `Application`) não criava as rotas lá
+  (404). Agora a deduplicação é por router.
+
+### Migration
+
+- Troque `Router::get(...)`/`Router::identify(...)` etc. por uma instância: `$router = new Router(); $router->get(...)`.
+- Código legado pode usar temporariamente a fachada `RouterFacade` (`@deprecated`) ou `Router::default()`,
+  que mantêm uma instância compartilhada (o comportamento global da 2.x).
+
 ## [2.2.3] - 2026-10-10
 
 ### Security

@@ -39,6 +39,14 @@ class StaticFileManager
     private static array $registeredPaths = [];
 
     /**
+     * Rotas de arquivo já registradas em cada router (evita duplicar a rota no mesmo router
+     * sem impedir que outro router receba os mesmos arquivos — SPEC-076).
+     *
+     * @var \WeakMap<Router, array<string, true>>|null
+     */
+    private static ?\WeakMap $routesByRouter = null;
+
+    /**
      * @var array<string, int>
      */
     private static array $stats = [
@@ -144,12 +152,17 @@ class StaticFileManager
      */
     private static function registerSingleFile(string $route, array $fileInfo, ?Router $router = null): void
     {
-        if (isset(self::$registeredFiles[$route])) {
+        $targetRouter = $router ?? Router::default();
+
+        self::$routesByRouter ??= new \WeakMap();
+        $routerRoutes = self::$routesByRouter[$targetRouter] ?? [];
+        if (isset($routerRoutes[$route])) {
             return;
         }
 
-        $targetRouter = $router ?? Router::default();
         $targetRouter->add('GET', $route, self::createFileHandler($fileInfo));
+        $routerRoutes[$route] = true;
+        self::$routesByRouter[$targetRouter] = $routerRoutes;
 
         self::$registeredFiles[$route] = [
             'path' => $fileInfo['path'],
@@ -412,6 +425,7 @@ class StaticFileManager
     {
         self::$registeredFiles = [];
         self::$registeredPaths = [];
+        self::$routesByRouter = null;
         self::$stats = [
             'registered_paths' => 0,
             'registered_files' => 0,

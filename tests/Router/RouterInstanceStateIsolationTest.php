@@ -6,6 +6,7 @@ namespace PivotPHP\Tests\Routing;
 
 use PHPUnit\Framework\TestCase;
 use PivotPHP\Routing\Router\Router;
+use PivotPHP\Routing\Router\StaticFileManager;
 
 /**
  * Prova o isolamento de estado entre instâncias de Router (SPEC-076).
@@ -76,5 +77,29 @@ final class RouterInstanceStateIsolationTest extends TestCase
         $this->assertCount(0, $routeB['middlewares']);
         $this->assertNull($routerB->identify('GET', '/admin/dashboard'));
     }
-}
 
+    public function testSameStaticDirectoryIsRegisteredInEachRouter(): void
+    {
+        $dir = sys_get_temp_dir() . '/pivot-spec076-' . uniqid();
+        mkdir($dir);
+        file_put_contents($dir . '/app.js', 'x');
+
+        try {
+            StaticFileManager::clearCache();
+            $routerA = new Router();
+            $routerB = new Router();
+
+            StaticFileManager::registerDirectory('/assets', $dir, [], $routerA);
+            StaticFileManager::registerDirectory('/assets', $dir, [], $routerB);
+            StaticFileManager::registerDirectory('/assets', $dir, [], $routerB);
+
+            $this->assertNotNull($routerA->identify('GET', '/assets/app.js'));
+            $this->assertNotNull($routerB->identify('GET', '/assets/app.js'));
+            $this->assertCount(1, $routerB->getRoutes(), 'no duplicate route in the same router');
+        } finally {
+            StaticFileManager::clearCache();
+            unlink($dir . '/app.js');
+            rmdir($dir);
+        }
+    }
+}

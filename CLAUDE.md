@@ -12,14 +12,14 @@ API inspirada no Express.js, compatível com PSR-7/PSR-15.
 
 ## Recursos
 
-- **API Express.js**: verbos `get/post/put/delete/patch/options/head/any` + `add()`.
+- **API Express.js**: verbos `get/post/put/delete/patch/options/head/any`, `match()` e `add()`.
 - **Grupos e prefixos**: `group()` prefixa rotas (com grupos aninhados); `use()` só associa middlewares a um prefixo, sem alterar caminhos (SPEC-053).
 - **Compilação de padrões**: `:param`, `{param}` e `<constraint>` viram regex (shortcuts
   `int`, `slug`, `alpha`, `alnum`, `uuid`, `date`, `year`, `month`, `day`).
 - **Casar**: `identify($method, $path)` com varredura linear simples.
 - **Introspecção**: `getRoutes()`, `getHttpMethodsAccepted()`, `toString()`.
-- **Isolamento**: `clear()` limpa o estado estático (usado pelo `Application` do core).
-- **Arquivos estáticos**: `StaticFileManager` registra arquivos como rotas; ignora arquivos/diretórios ocultos e symlinks que apontem para fora da pasta (SPEC-062).
+- **Isolamento**: estado por instância (SPEC-076) — cada `Router` tem suas rotas, grupos e middlewares; `clear()` limpa só aquela instância.
+- **Arquivos estáticos**: `StaticFileManager` registra arquivos como rotas no router informado (deduplicação por router); ignora arquivos/diretórios ocultos e symlinks que apontem para fora da pasta (SPEC-062).
 
 ## Estrutura
 
@@ -27,7 +27,8 @@ API inspirada no Express.js, compatível com PSR-7/PSR-15.
 pivotphp-core-routing/
 ├── src/
 │   ├── Router/                  # Implementação
-│   │   ├── Router.php           # Fachada estática (registrar + compilar + casar)
+│   │   ├── Router.php           # Router por instância (registrar + compilar + casar)
+│   │   ├── RouterFacade.php     # @deprecated — fachada estática sobre uma instância compartilhada
 │   │   ├── RouterInstance.php   # Sub-router de instância usado por group()
 │   │   ├── Route.php            # Valor-objeto legado (compatibilidade)
 │   │   ├── RouteCollection.php  # Coleção legada (compatibilidade)
@@ -55,24 +56,26 @@ composer quality:check  # phpstan + cs:check + test
 
 ## API do Router
 
-Todos os métodos são **estáticos** (o `Router` mantém estado estático; ver SPEC-076 para o
-problema de isolamento entre instâncias de `Application`).
+Desde a 3.0.0 os métodos são **de instância** (SPEC-076); só `compilePattern()` e
+`isStaticRoute()` continuam estáticos. A `RouterFacade` (`@deprecated`) e `Router::default()`
+mantêm uma instância compartilhada para código legado — não use em código novo.
 
 ```php
 use PivotPHP\Routing\Router\Router;
 
-Router::get('/users', fn($req, $res) => $res->json([]));
-Router::get('/users/:id<\d+>', [UserController::class, 'show']); // array callable
+$router = new Router();
+$router->get('/users', fn($req, $res) => $res->json([]));
+$router->get('/users/:id<\d+>', [UserController::class, 'show']); // array callable
 
-Router::group('/api', function ($router) {
-    $router->get('/status', fn() => 'ok');
+$router->group('/api', function ($group) {
+    $group->get('/status', fn() => 'ok');
 }, [$authMiddleware]);
 
-Router::use('/admin', $adminMiddleware); // middlewares para rotas que começam com /admin (não prefixa)
+$router->use('/admin', $adminMiddleware); // middlewares para rotas que começam com /admin (não prefixa)
 
-$route = Router::identify('GET', '/users/42'); // ?array
-$routes = Router::getRoutes();
-Router::clear();
+$route = $router->identify('GET', '/users/42'); // ?array
+$routes = $router->getRoutes();
+$router->clear();
 ```
 
 ### Handler
@@ -104,16 +107,17 @@ Ao mudar o comportamento, atualize os testes correspondentes. A suíte do `pivot
 ## Integração com o PivotPHP Core
 
 O `pivotphp-core` consome este pacote via `PivotPHP\Routing\Router\Router` (namespace). O
-`Application` do core chama `Router::clear()` no boot e registra rotas via
-`$this->router->get(...)`.
+`Application` do core cria a sua própria instância (`new Router()`), registra rotas via
+`$this->router->get(...)` e passa essa instância ao `StaticFileManager`.
 
 Mudanças na API pública deste pacote podem quebrar o `pivotphp-core` — verifique o uso no
 consumidor antes de alterar contratos.
 
 ## Versionamento
 
-- **Versão atual**: 2.2.3 (SPEC-062: estáticos sem dotfiles nem symlinks para fora da pasta; SPEC-057: CI e PHPStan 2; SPEC-053: `use()` não altera mais o caminho
-  das rotas). Linha 2.x desde a simplificação da 2.0.0 (SPEC-086).
+- **Versão atual**: 3.0.0 (SPEC-076: Router com estado por instância — MAJOR). Na 2.2.x: SPEC-062
+  (estáticos sem dotfiles nem symlinks para fora da pasta), SPEC-057 (CI e PHPStan 2) e SPEC-053
+  (`use()` não altera mais o caminho das rotas).
 - **PHP**: 8.1+
 - **Licença**: MIT
 
