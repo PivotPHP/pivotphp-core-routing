@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`Router::use($prefixo, ...$middlewares)` não altera mais o caminho das rotas registradas depois**
+  (SPEC-053). Antes, o prefixo ficava ativo para sempre: após `Router::use('/api', $mw)`, uma rota
+  `/health` era registrada como `/api/health` e `GET /health` respondia 404 (comportamento presente desde
+  a 1.0.0). Agora `use()` apenas associa os middlewares ao prefixo, como `app.use(path, mw)` no Express;
+  para prefixar rotas, use `Router::group()`. Quem dependia do efeito colateral deve trocar `use()` por
+  `group()`.
+
 ## [2.2.1] - 2026-10-10
 
 ### Changed
