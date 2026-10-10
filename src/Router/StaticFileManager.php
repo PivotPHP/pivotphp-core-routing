@@ -12,6 +12,15 @@ use Psr\Http\Message\ResponseInterface;
  * Estratégia única: **registra cada arquivo do diretório como uma rota**
  * (`Router::add('GET', ...)`) — sem wildcards/regex. Uma implementação só
  * (consolidação de `SimpleStaticFileManager` — SPEC-095).
+ *
+ * @phpstan-type StaticFileInfo array{
+ *     path: string,
+ *     physical_path: string,
+ *     size: int,
+ *     modified: int,
+ *     extension: string,
+ *     mime: string
+ * }
  */
 class StaticFileManager
 {
@@ -292,7 +301,7 @@ class StaticFileManager
     /**
      * Lista arquivos disponíveis num diretório registrado.
      *
-     * @return array<int, array{path: string, physical_path: string, size: int, modified: int, extension: string, mime: string}>
+     * @return array<int, StaticFileInfo>
      */
     public static function listFiles(
         string $routePrefix,
@@ -349,7 +358,7 @@ class StaticFileManager
     /**
      * Mapa de todas as rotas de arquivos estáticos.
      *
-     * @return array<string, array{physical_path: string, file_count: int, files: array<int, array{path: string, physical_path: string, size: int, modified: int, extension: string, mime: string}>}>
+     * @return array<string, array{physical_path: string, file_count: int, files: array<int, StaticFileInfo>}>
      */
     public static function generateRouteMap(): array
     {

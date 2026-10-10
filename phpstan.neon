@@ -5,11 +5,6 @@ parameters:
     level: 9
     paths:
         - src
-    excludePaths:
-        - src/Router/MockRequest.php
-        - src/Router/MockResponse.php
-    checkMissingIterableValueType: true
-    checkGenericClassInNonGenericObjectType: true
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
     ignoreErrors:

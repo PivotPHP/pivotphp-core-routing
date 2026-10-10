@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **CI** (`.github/workflows/ci.yml`): PHPUnit, PHPStan nível 9, PHPCS e `composer audit` em PHP 8.1
+  (dependências mínimas), 8.3 e 8.4 (SPEC-057).
+- `phpcs.xml`: PSR-12; arquivos de teste podem declarar classes auxiliares.
+
+### Changed
+
+- Dependências de desenvolvimento: PHPStan `^2.0` (+ strict-rules `^2.0`); PHPUnit
+  `^10.5.62|^11.5.50` e PHP_CodeSniffer `^3.13.6`, acima das versões com vulnerabilidades publicadas.
+
+### Fixed
+
+- `CallableResolver::resolve()` não trata mais um array **associativo** de dois elementos como array
+  callable (gerava warnings e erro enganoso); agora exige lista `[classe, metodo]`.
+- Tipos estreitados para PHPStan 2: `Arr::groupBy()` com chave não escalar, `Utils::isInt()` sem
+  comparação frouxa (mesmo resultado), `Utils::csrfToken()`/`checkCsrf()` com valor de sessão não-string.
+
 ## [2.2.1] - 2026-10-10
 
 ### Changed

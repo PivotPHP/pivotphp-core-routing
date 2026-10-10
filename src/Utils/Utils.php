@@ -95,7 +95,7 @@ class Utils
      */
     public static function isInt($value): bool
     {
-        return is_numeric($value) && (int)$value == $value;
+        return is_numeric($value) && (float) $value === (float) (int) $value;
     }
 
     /**
@@ -223,10 +223,12 @@ class Utils
         if (session_status() !== PHP_SESSION_ACTIVE) {
             session_start();
         }
-        if (!isset($_SESSION['csrf_token']) || $_SESSION['csrf_token'] === '') {
-            $_SESSION['csrf_token'] = self::randomToken(32);
+        $token = $_SESSION['csrf_token'] ?? null;
+        if (!is_string($token) || $token === '') {
+            $token = self::randomToken(32);
+            $_SESSION['csrf_token'] = $token;
         }
-        return $_SESSION['csrf_token'];
+        return $token;
     }
 
     /**
@@ -240,7 +242,8 @@ class Utils
         if (session_status() !== PHP_SESSION_ACTIVE) {
             session_start();
         }
-        return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+        $stored = $_SESSION['csrf_token'] ?? null;
+        return is_string($stored) && hash_equals($stored, $token);
     }
 
     /**
