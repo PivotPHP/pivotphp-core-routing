@@ -19,7 +19,7 @@ API inspirada no Express.js, compatível com PSR-7/PSR-15.
 - **Casar**: `identify($method, $path)` com varredura linear simples.
 - **Introspecção**: `getRoutes()`, `getHttpMethodsAccepted()`, `toString()`.
 - **Isolamento**: `clear()` limpa o estado estático (usado pelo `Application` do core).
-- **Arquivos estáticos**: `StaticFileManager` registra arquivos como rotas.
+- **Arquivos estáticos**: `StaticFileManager` registra arquivos como rotas; ignora arquivos/diretórios ocultos e symlinks que apontem para fora da pasta (SPEC-062).
 
 ## Estrutura
 
