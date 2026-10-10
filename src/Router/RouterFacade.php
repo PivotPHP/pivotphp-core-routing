@@ -45,3 +45,4 @@ class RouterFacade
         return $instance->{$method}(...$args);
     }
 }
+

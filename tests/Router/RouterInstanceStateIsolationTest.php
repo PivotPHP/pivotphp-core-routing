@@ -77,3 +77,4 @@ final class RouterInstanceStateIsolationTest extends TestCase
         $this->assertNull($routerB->identify('GET', '/admin/dashboard'));
     }
 }
+
