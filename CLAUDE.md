@@ -112,8 +112,8 @@ consumidor antes de alterar contratos.
 
 ## Versionamento
 
-- **Versão atual**: 2.2.1 (SPEC-095 unificou os static file managers; SPEC-061/072 corrigidos;
-  dependências enxugadas). Linha 2.x desde a simplificação da 2.0.0 (SPEC-086).
+- **Versão atual**: 2.2.2 (SPEC-057: CI e PHPStan 2; SPEC-053: `use()` não altera mais o caminho
+  das rotas). Linha 2.x desde a simplificação da 2.0.0 (SPEC-086).
 - **PHP**: 8.1+
 - **Licença**: MIT
 
