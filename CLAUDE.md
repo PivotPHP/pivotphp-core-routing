@@ -112,7 +112,7 @@ consumidor antes de alterar contratos.
 
 ## Versionamento
 
-- **Versão atual**: 2.2.2 (SPEC-057: CI e PHPStan 2; SPEC-053: `use()` não altera mais o caminho
+- **Versão atual**: 2.2.3 (SPEC-062: estáticos sem dotfiles nem symlinks para fora da pasta; SPEC-057: CI e PHPStan 2; SPEC-053: `use()` não altera mais o caminho
   das rotas). Linha 2.x desde a simplificação da 2.0.0 (SPEC-086).
 - **PHP**: 8.1+
 - **Licença**: MIT
