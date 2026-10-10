@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`Router::use($prefixo, ...$middlewares)` não altera mais o caminho das rotas registradas depois**
+  (SPEC-053). Antes, o prefixo ficava ativo para sempre: após `Router::use('/api', $mw)`, uma rota
+  `/health` era registrada como `/api/health` e `GET /health` respondia 404 (comportamento presente desde
+  a 1.0.0). Agora `use()` apenas associa os middlewares ao prefixo, como `app.use(path, mw)` no Express;
+  para prefixar rotas, use `Router::group()`. Quem dependia do efeito colateral deve trocar `use()` por
+  `group()`.
 - `CallableResolver::resolve()` não trata mais um array **associativo** de dois elementos como array
   callable (gerava warnings e erro enganoso); agora exige lista `[classe, metodo]`.
 - Tipos estreitados para PHPStan 2: `Arr::groupBy()` com chave não escalar, `Utils::isInt()` sem

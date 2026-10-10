@@ -78,14 +78,16 @@ class Router
     }
 
     /**
-     * Define um prefixo/base para rotas agrupadas OU registra middlewares para um grupo.
+     * Associa middlewares a um prefixo de caminho (como `app.use(path, mw)` no Express).
+     *
+     * Os middlewares valem para as rotas registradas depois cujo caminho começa com o prefixo.
+     * Não altera o caminho de nenhuma rota — para prefixar rotas, use group() (SPEC-053).
      */
     public static function use(string $prev_path, callable ...$middlewares): void
     {
         if ($prev_path === '') {
             $prev_path = '/';
         }
-        self::$current_group_prefix = $prev_path;
 
         if (count($middlewares) > 0) {
             self::$groupMiddlewares[$prev_path] = array_values($middlewares);

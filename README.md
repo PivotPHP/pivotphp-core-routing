@@ -13,7 +13,7 @@ premature optimization.
 
 - **Express.js-inspired API**: `get()`, `post()`, `put()`, `delete()`, `patch()`, `options()`,
   `head()`, `any()` and `add()`.
-- **Groups & prefixes**: `group()` and `use()` (nested groups supported).
+- **Groups & prefixes**: `group()` prefixes routes (nested groups supported); `use()` attaches middlewares to a path prefix without changing route paths.
 - **Pattern compilation**: `:param`, `{param}` and `<constraint>` with shortcuts (`int`, `slug`,
   `alpha`, `alnum`, `uuid`, `date`, `year`, `month`, `day`).
 - **Static file serving**: `StaticFileManager` registers files as routes.
@@ -81,7 +81,7 @@ StaticFileManager::registerDirectory('/public', __DIR__ . '/public');
 | `add($method, $path, $handler, $metadata = [], ...$middlewares)` | Register a route. |
 | `get/post/put/delete/patch/options/head/any($path, $handler, ...)` | HTTP verb shortcuts. |
 | `group($prefix, $callback, $middlewares = [])` | Register a route group. |
-| `use($prefix, ...$middlewares)` | Register group middlewares by prefix. |
+| `use($prefix, ...$middlewares)` | Attach middlewares to routes registered afterwards whose path starts with `$prefix`; does not change route paths. |
 | `addHttpMethod($method)` | Register an additional HTTP method. |
 | `identify($method, $path)` | Match a route; returns the route array or `null`. |
 | `compilePattern($path)` | Compile a path to regex + parameter list. |

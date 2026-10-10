@@ -13,7 +13,7 @@ API inspirada no Express.js, compatível com PSR-7/PSR-15.
 ## Recursos
 
 - **API Express.js**: verbos `get/post/put/delete/patch/options/head/any` + `add()`.
-- **Grupos e prefixos**: `group()` e `use()` (com suporte a grupos aninhados).
+- **Grupos e prefixos**: `group()` prefixa rotas (com grupos aninhados); `use()` só associa middlewares a um prefixo, sem alterar caminhos (SPEC-053).
 - **Compilação de padrões**: `:param`, `{param}` e `<constraint>` viram regex (shortcuts
   `int`, `slug`, `alpha`, `alnum`, `uuid`, `date`, `year`, `month`, `day`).
 - **Casar**: `identify($method, $path)` com varredura linear simples.
@@ -68,7 +68,7 @@ Router::group('/api', function ($router) {
     $router->get('/status', fn() => 'ok');
 }, [$authMiddleware]);
 
-Router::use('/admin', $adminMiddleware); // middlewares de grupo por prefixo
+Router::use('/admin', $adminMiddleware); // middlewares para rotas que começam com /admin (não prefixa)
 
 $route = Router::identify('GET', '/users/42'); // ?array
 $routes = Router::getRoutes();
