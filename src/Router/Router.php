@@ -329,7 +329,7 @@ class Router
     /**
      * Extrai parâmetros correspondentes de uma rota.
      *
-     * @param array<int, array<string, mixed>> $parameters
+     * @param array<mixed> $parameters entries without a string 'name' are skipped
      * @param array<int, string> $matches
      * @return array<string, string>
      */

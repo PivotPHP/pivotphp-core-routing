@@ -146,7 +146,6 @@ class RouteCompilationAndIdentificationTest extends TestCase
         $compiled2 = Router::compilePattern($path);
 
         $this->assertEquals($compiled1, $compiled2);
-
     }
 
     // ========================================
@@ -494,9 +493,15 @@ class RouteCompilationAndIdentificationTest extends TestCase
     public function testIdentifyWithComplexRealWorldScenario(): void
     {
         // Simula um cenário real com múltiplas rotas
-        Router::get('/', function () { return 'home'; });
-        Router::get('/about', function () { return 'about'; });
-        Router::get('/contact', function () { return 'contact'; });
+        Router::get('/', function () {
+            return 'home';
+        });
+        Router::get('/about', function () {
+            return 'about';
+        });
+        Router::get('/contact', function () {
+            return 'contact';
+        });
 
         Router::group('/api', function ($router) {
             $router->get('/users', function () {

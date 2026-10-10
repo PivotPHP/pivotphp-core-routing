@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<ruleset name="PivotPHP Core Routing">
+    <description>PSR-12; test files may declare small helper classes next to the test case.</description>
+    <file>src</file>
+    <file>tests</file>
+    <arg name="extensions" value="php"/>
+    <rule ref="PSR12"/>
+    <rule ref="PSR1.Classes.ClassDeclaration.MultipleClasses">
+        <exclude-pattern>*/tests/*</exclude-pattern>
+    </rule>
+</ruleset>
