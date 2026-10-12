@@ -8,6 +8,12 @@ use BadMethodCallException;
 use Closure;
 use InvalidArgumentException;
 use ReflectionFunction;
+use PivotPHP\Routing\Router\Policy\DefaultMethodPolicy;
+use PivotPHP\Routing\Router\Policy\HeadMethodPolicy;
+use PivotPHP\Routing\Router\Policy\MethodPolicy;
+use PivotPHP\Routing\Router\Policy\OptionsMethodPolicy;
+use PivotPHP\Routing\Router\Resolution\RouteMatched;
+use PivotPHP\Routing\Router\Resolution\RouteResolution;
 use PivotPHP\Routing\Utils\CallableResolver;
 
 /**
@@ -75,6 +81,33 @@ class Router
     private array $httpMethodsAccepted = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'];
 
     /**
+     * Índice em memória de alta performance.
+     */
+    private RouteIndex $routeIndex;
+
+    /**
+     * Políticas de método HTTP (Padrão Strategy).
+     *
+     * @var array<string, MethodPolicy>
+     */
+    private array $methodPolicies = [];
+
+    public function __construct()
+    {
+        $this->routeIndex = new RouteIndex();
+        $defaultPolicy = new DefaultMethodPolicy();
+        $this->methodPolicies = [
+            'GET' => $defaultPolicy,
+            'POST' => $defaultPolicy,
+            'PUT' => $defaultPolicy,
+            'DELETE' => $defaultPolicy,
+            'PATCH' => $defaultPolicy,
+            'HEAD' => new HeadMethodPolicy(),
+            'OPTIONS' => new OptionsMethodPolicy(),
+        ];
+    }
+
+    /**
      * Registra um método HTTP adicional.
      */
     public function addHttpMethod(string $method): void
@@ -82,6 +115,9 @@ class Router
         $method = strtoupper($method);
         if (!in_array($method, $this->httpMethodsAccepted, true)) {
             $this->httpMethodsAccepted[] = $method;
+            if (!isset($this->methodPolicies[$method])) {
+                $this->methodPolicies[$method] = new DefaultMethodPolicy();
+            }
         }
     }
 
@@ -193,7 +229,7 @@ class Router
         $path = $this->optimizePathProcessing($path);
         $compiled = self::compilePattern($path);
 
-        $this->routes[] = [
+        $route = [
             'method' => $method,
             'path' => $path,
             'middlewares' => array_merge($this->getGroupMiddlewaresForPath($path), $middlewares),
@@ -203,97 +239,59 @@ class Router
             'parameters' => $compiled['parameters'],
             'has_parameters' => count($compiled['parameters']) > 0
         ];
+
+        $this->routes[] = $route;
+        $this->routeIndex->addRoute($route);
+    }
+
+    /**
+     * Resolve o método e caminho retornando um resultado tipado (SPEC-114).
+     */
+    public function resolve(string $method, ?string $path = null): RouteResolution
+    {
+        $method = strtoupper($method);
+        if ($path === null) {
+            $path = self::DEFAULT_PATH;
+        }
+
+        $normalizedPath = RouteIndex::normalizePathForMatching($path);
+        $policy = $this->methodPolicies[$method] ?? new DefaultMethodPolicy();
+
+        return $policy->resolve($method, $normalizedPath, $path, $this->routeIndex);
     }
 
     /**
      * Identifica a rota que casa com o método e o path.
      *
-     * HEAD sem rota explícita cai para a rota GET (a emissão omite o corpo) — SPEC-072.
+     * @deprecated desde a 3.1.0; use resolve() que retorna RouteResolution tipado.
+     *
+     * @return array<string, mixed>|null
      */
     public function identify(string $method, ?string $path = null): ?array
     {
-        $route = $this->matchMethod($method, $path);
+        $resolution = $this->resolve($method, $path);
 
-        if ($route === null && strtoupper($method) === 'HEAD') {
-            $route = $this->matchMethod('GET', $path);
-        }
-
-        return $route;
-    }
-
-    /**
-     * Métodos HTTP com ao menos uma rota casando com o path (para 405 com `Allow`) — SPEC-072.
-     *
-     * @return array<int, string>
-     */
-    public function allowedMethods(string $path): array
-    {
-        $allowed = [];
-
-        foreach ($this->httpMethodsAccepted as $method) {
-            if ($this->matchMethod($method, $path) !== null) {
-                $allowed[] = $method;
-            }
-        }
-
-        if (in_array('GET', $allowed, true) && !in_array('HEAD', $allowed, true)) {
-            $allowed[] = 'HEAD';
-        }
-
-        return $allowed;
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function matchMethod(string $method, ?string $path = null): ?array
-    {
-        $method = strtoupper($method);
-
-        if ($path === null) {
-            $path = self::DEFAULT_PATH;
-        }
-
-        $normalizedPath = self::normalizePathForMatching($path);
-
-        // 1. Match estático exato (com normalização de trailing slash).
-        foreach ($this->routes as $route) {
-            if ($route['method'] !== $method) {
-                continue;
-            }
-
-            $routePath = is_string($route['path']) ? $route['path'] : self::DEFAULT_PATH;
-            if (self::normalizePathForMatching($routePath) === $normalizedPath) {
-                return $route;
-            }
-        }
-
-        // 2. Match dinâmico (parâmetros).
-        foreach ($this->routes as $route) {
-            if ($route['method'] !== $method) {
-                continue;
-            }
-
-            $matched = self::matchRoutePattern($route, $path);
-            if ($matched !== null) {
-                return $matched;
-            }
+        if ($resolution instanceof RouteMatched) {
+            return $resolution->toArray();
         }
 
         return null;
     }
 
     /**
-     * Normaliza um path para comparação (remove trailing slash, exceto na raiz).
+     * Métodos HTTP com ao menos uma rota casando com o path (para 405 com `Allow`) — SPEC-072.
+     *
+     * @deprecated desde a 3.1.0; use resolve() que já calcula os métodos permitidos em O(1).
+     *
+     * @return array<int, string>
      */
-    private static function normalizePathForMatching(string $path): string
+    public function allowedMethods(string $path): array
     {
-        if ($path !== '/' && $path !== '' && str_ends_with($path, '/')) {
-            return rtrim($path, '/');
-        }
-
-        return $path;
+        $normalizedPath = RouteIndex::normalizePathForMatching($path);
+        return $this->routeIndex->getAllowedMethodsForPath($normalizedPath, $path);
     }
+
+
 
     /**
      * Remove closures, objetos e recursos de arrays recursivamente.
@@ -334,51 +332,7 @@ class Router
         return '[unserializable]';
     }
 
-    /**
-     * Extrai parâmetros correspondentes de uma rota.
-     *
-     * @param array<mixed> $parameters entries without a string 'name' are skipped
-     * @param array<int, string> $matches
-     * @return array<string, string>
-     */
-    private static function extractMatchedParameters(array $parameters, array $matches): array
-    {
-        $params = [];
 
-        for ($i = 1; $i < count($matches); $i++) {
-            $paramInfo = $parameters[$i - 1] ?? null;
-            if (is_array($paramInfo) && isset($paramInfo['name']) && is_string($paramInfo['name'])) {
-                $params[$paramInfo['name']] = $matches[$i];
-            }
-        }
-
-        return $params;
-    }
-
-    /**
-     * Tenta casar uma rota (via pattern) contra um path.
-     *
-     * @param array<string, mixed> $route
-     * @return array<string, mixed>|null
-     */
-    private static function matchRoutePattern(array $route, string $path): ?array
-    {
-        $pattern = $route['pattern'] ?? null;
-        if (!is_string($pattern) || $pattern === '') {
-            return null;
-        }
-
-        if (preg_match($pattern, $path, $matches) === 1) {
-            $parameters = $route['parameters'] ?? [];
-            if (is_array($parameters) && count($parameters) > 0 && count($matches) > 1) {
-                $route['matched_params'] = self::extractMatchedParameters($parameters, $matches);
-            }
-
-            return $route;
-        }
-
-        return null;
-    }
 
     /**
      * Normaliza um prefixo de grupo.
