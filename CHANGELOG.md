@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-10-12
+
+### Added
+- **Nova Engine de Resolução com Padrões Strategy e Facade** (SPEC-114):
+  - `Router::resolve(string $method, ?string $path = null): RouteResolution` retorna resultados tipados:
+    - `RouteMatched`: rota encontrada com parâmetros casados, middlewares e metadados.
+    - `MethodNotAllowed`: caminho existe para outros métodos HTTP, com lista de métodos permitidos para header `Allow`.
+    - `RouteNotFound`: caminho inexistente.
+  - Padrão **Strategy** para políticas de método HTTP (`MethodPolicy`):
+    - `DefaultMethodPolicy`: política padrão para verbos diretos (GET, POST, PUT, DELETE, PATCH).
+    - `HeadMethodPolicy`: preferência por rota HEAD explícita com fallback automático para GET (SPEC-072).
+    - `OptionsMethodPolicy`: preferência por rota OPTIONS explícita com cálculo automático de métodos permitidos (204).
+  - Padrão **Facade** através da hierarquia `RouteResolution` (`RouteMatched`, `MethodNotAllowed`, `RouteNotFound`).
+  - Lookup $O(1)$ para rotas estáticas e prefix bucketing de alta performance para rotas dinâmicas (`RouteIndex`).
+
+### Deprecated
+- `Router::identify()`: descontinuado em favor de `Router::resolve()`. Mantido 100% retrocompatível, delegando para `resolve()`.
+- `Router::allowedMethods()`: descontinuado em favor de `Router::resolve()`. Mantido 100% retrocompatível, delegando para `RouteIndex`.
+
+### Performance
+- **Zero Regressão**: Resolução de rotas estáticas até 99.4% mais rápida (0.24 µs) e rotas dinâmicas até 97.4% mais rápida (1.04 µs em 500 rotas).
+- Otimização do bootstrap e compilação de rotas, sem overhead de alocação de objetos no ciclo do PHP-FPM.
+
 ## [3.0.0] - 2026-10-10
 
 ### Changed (Breaking Changes)
