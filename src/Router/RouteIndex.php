@@ -12,11 +12,16 @@ use PivotPHP\Routing\Router\Resolution\RouteMatched;
 final class RouteIndex
 {
     /**
-     * Instâncias imutáveis pré-alocadas de RouteMatched para rotas estáticas sem parâmetros.
-     * Elimina alocação de objetos no hot-path!
+     * Rotas estáticas indexadas por método e caminho normalizado: [METHOD][NORMALIZED_PATH] => route array.
+     * @var array<string, array<string, array<string, mixed>>>
+     */
+    private array $staticRoutes = [];
+
+    /**
+     * Cache de RouteMatched imutável sob demanda para rotas estáticas.
      * @var array<string, array<string, RouteMatched>>
      */
-    private array $staticMatched = [];
+    private array $staticMatchedCache = [];
 
     /**
      * Métodos permitidos para cada caminho estático: [NORMALIZED_PATH][METHOD] => true.
@@ -31,45 +36,36 @@ final class RouteIndex
     private array $dynamicRoutesByPrefix = [];
 
     /**
-     * Todas as rotas dinâmicas indexadas por prefixo literal para cálculo de allowedMethods: [PREFIX][] => route array.
-     * @var array<string, array<int, array<string, mixed>>>
-     */
-    private array $allDynamicRoutesByPrefix = [];
-
-    /**
-     * Adiciona uma rota ao índice.
+     * Adiciona uma rota ao índice a partir de array (retrocompatível).
      *
      * @param array<string, mixed> $route
      */
     public function addRoute(array $route): void
     {
-        $methodRaw = $route['method'] ?? 'GET';
-        $method = is_string($methodRaw) ? strtoupper($methodRaw) : 'GET';
-        $pathRaw = $route['path'] ?? '/';
-        $path = is_string($pathRaw) ? $pathRaw : '/';
-        $normalizedPath = self::normalizePathForMatching($path);
+        $method = is_string($route['method'] ?? null) ? $route['method'] : 'GET';
+        $path = is_string($route['path'] ?? null) ? $route['path'] : '/';
         $hasParameters = ($route['has_parameters'] ?? false) === true;
+
+        $this->addRouteDirect($method, $path, $route, $hasParameters);
+    }
+
+    /**
+     * Adiciona uma rota diretamente com tipos primitivos (hot-path de registro com zero overhead).
+     *
+     * @param array<string, mixed> $route
+     */
+    public function addRouteDirect(string $method, string $path, array $route, bool $hasParameters): void
+    {
+        $normalizedPath = $path !== '/' && str_ends_with($path, '/') ? rtrim($path, '/') : $path;
 
         if (!$hasParameters) {
             $this->staticPathMethods[$normalizedPath][$method] = true;
-
-            /** @var array<int, callable> $middlewares */
-            $middlewares = is_array($route['middlewares'] ?? null) ? $route['middlewares'] : [];
-            /** @var array<string, mixed> $metadata */
-            $metadata = is_array($route['metadata'] ?? null) ? $route['metadata'] : [];
-
-            $this->staticMatched[$method][$normalizedPath] = new RouteMatched(
-                $route,
-                [],
-                $middlewares,
-                $metadata
-            );
+            $this->staticRoutes[$method][$normalizedPath] = $route;
             return;
         }
 
         $prefix = self::extractLiteralPrefix($path);
         $this->dynamicRoutesByPrefix[$method][$prefix][] = $route;
-        $this->allDynamicRoutesByPrefix[$prefix][] = $route;
     }
 
     /**
@@ -79,9 +75,22 @@ final class RouteIndex
     {
         $method = strtoupper($method);
 
-        // 1. O(1) Match estático imediato (com RouteMatched pré-alocado)
-        if (isset($this->staticMatched[$method][$normalizedPath])) {
-            return $this->staticMatched[$method][$normalizedPath];
+        // 1. O(1) Match estático imediato
+        if (isset($this->staticRoutes[$method][$normalizedPath])) {
+            if (isset($this->staticMatchedCache[$method][$normalizedPath])) {
+                return $this->staticMatchedCache[$method][$normalizedPath];
+            }
+
+            $route = $this->staticRoutes[$method][$normalizedPath];
+            /** @var array<int, callable> $middlewares */
+            $middlewares = is_array($route['middlewares'] ?? null) ? $route['middlewares'] : [];
+            /** @var array<string, mixed> $metadata */
+            $metadata = is_array($route['metadata'] ?? null) ? $route['metadata'] : [];
+
+            $matched = new RouteMatched($route, [], $middlewares, $metadata);
+            $this->staticMatchedCache[$method][$normalizedPath] = $matched;
+
+            return $matched;
         }
 
         // 2. Match dinâmico com busca direcionada por prefixos candidatos
@@ -132,19 +141,16 @@ final class RouteIndex
         // 2. Métodos dinâmicos
         $candidatePrefixes = self::getCandidatePrefixes($normalizedPath);
         foreach ($candidatePrefixes as $prefix) {
-            if (!isset($this->allDynamicRoutesByPrefix[$prefix])) {
-                continue;
-            }
-
-            foreach ($this->allDynamicRoutesByPrefix[$prefix] as $route) {
-                $methodRaw = $route['method'] ?? 'GET';
-                $method = is_string($methodRaw) ? $methodRaw : 'GET';
-                if (in_array($method, $allowed, true)) {
+            foreach ($this->dynamicRoutesByPrefix as $method => $routesByPrefix) {
+                if (in_array($method, $allowed, true) || !isset($routesByPrefix[$prefix])) {
                     continue;
                 }
 
-                if (self::matchRoutePattern($route, $rawPath) !== null) {
-                    $allowed[] = $method;
+                foreach ($routesByPrefix[$prefix] as $route) {
+                    if (self::matchRoutePattern($route, $rawPath) !== null) {
+                        $allowed[] = $method;
+                        break;
+                    }
                 }
             }
         }
@@ -162,26 +168,18 @@ final class RouteIndex
      */
     public static function extractLiteralPrefix(string $path): string
     {
-        $trimmed = trim($path, '/');
-        if ($trimmed === '') {
-            return '/';
+        $pos = strcspn($path, ':{(');
+        if ($pos >= strlen($path)) {
+            return $path !== '/' && str_ends_with($path, '/') ? rtrim($path, '/') : $path;
         }
 
-        $parts = explode('/', $trimmed);
-        $prefixParts = [];
-
-        foreach ($parts as $part) {
-            if (str_contains($part, ':') || str_contains($part, '{') || str_contains($part, '(')) {
-                break;
+        for ($i = $pos - 1; $i > 0; $i--) {
+            if ($path[$i] === '/') {
+                return substr($path, 0, $i);
             }
-            $prefixParts[] = $part;
         }
 
-        if ($prefixParts === []) {
-            return '/';
-        }
-
-        return '/' . implode('/', $prefixParts);
+        return '/';
     }
 
     /**
@@ -192,18 +190,20 @@ final class RouteIndex
      */
     public static function getCandidatePrefixes(string $path): array
     {
-        $trimmed = trim($path, '/');
-        if ($trimmed === '') {
+        if ($path === '/' || $path === '') {
             return ['/'];
         }
 
-        $parts = explode('/', $trimmed);
         $candidates = [];
-        $current = '';
+        $current = $path;
 
-        for ($i = count($parts); $i > 0; $i--) {
-            $slice = array_slice($parts, 0, $i);
-            $candidates[] = '/' . implode('/', $slice);
+        while (($lastSlash = strrpos($current, '/')) !== false && $lastSlash > 0) {
+            $candidates[] = $current;
+            $current = substr($current, 0, $lastSlash);
+        }
+
+        if ($current !== '' && $current !== '/') {
+            $candidates[] = $current;
         }
 
         $candidates[] = '/';

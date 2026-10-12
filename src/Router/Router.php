@@ -87,37 +87,32 @@ class Router
 
     /**
      * Políticas de método HTTP (Padrão Strategy).
-     *
+     */
+    private static ?DefaultMethodPolicy $defaultPolicy = null;
+    private static ?HeadMethodPolicy $headPolicy = null;
+    private static ?OptionsMethodPolicy $optionsPolicy = null;
+
+    /**
      * @var array<string, MethodPolicy>
      */
-    private array $methodPolicies = [];
+    private array $customPolicies = [];
 
     public function __construct()
     {
         $this->routeIndex = new RouteIndex();
-        $defaultPolicy = new DefaultMethodPolicy();
-        $this->methodPolicies = [
-            'GET' => $defaultPolicy,
-            'POST' => $defaultPolicy,
-            'PUT' => $defaultPolicy,
-            'DELETE' => $defaultPolicy,
-            'PATCH' => $defaultPolicy,
-            'HEAD' => new HeadMethodPolicy(),
-            'OPTIONS' => new OptionsMethodPolicy(),
-        ];
     }
 
     /**
      * Registra um método HTTP adicional.
      */
-    public function addHttpMethod(string $method): void
+    public function addHttpMethod(string $method, ?MethodPolicy $policy = null): void
     {
         $method = strtoupper($method);
         if (!in_array($method, $this->httpMethodsAccepted, true)) {
             $this->httpMethodsAccepted[] = $method;
-            if (!isset($this->methodPolicies[$method])) {
-                $this->methodPolicies[$method] = new DefaultMethodPolicy();
-            }
+        }
+        if ($policy !== null) {
+            $this->customPolicies[$method] = $policy;
         }
     }
 
@@ -218,30 +213,57 @@ class Router
             );
         }
 
-        $resolvedHandler = CallableResolver::resolve($handler);
+        $resolvedHandler = is_callable($handler) ? $handler : CallableResolver::resolve($handler);
 
-        foreach ($middlewares as $mw) {
-            if (!is_callable($mw)) {
-                throw new InvalidArgumentException('Middleware must be callable');
+        if ($middlewares !== []) {
+            foreach ($middlewares as $mw) {
+                if (!is_callable($mw)) {
+                    throw new InvalidArgumentException('Middleware must be callable');
+                }
             }
         }
 
-        $path = $this->optimizePathProcessing($path);
+        if ($this->current_group_prefix !== '' || $path[0] !== '/') {
+            $path = $this->optimizePathProcessing($path);
+        }
+
+        $routeMiddlewares = $this->groupMiddlewares === []
+            ? $middlewares
+            : array_merge($this->getGroupMiddlewaresForPath($path), $middlewares);
+
+        // Fast-path para rotas estáticas: elimina chamada a compilePattern e alocações
+        if (!str_contains($path, ':') && !str_contains($path, '{')) {
+            $route = [
+                'method' => $method,
+                'path' => $path,
+                'middlewares' => $routeMiddlewares,
+                'handler' => $resolvedHandler,
+                'metadata' => $metadata === [] ? [] : self::sanitizeForJson($metadata),
+                'pattern' => null,
+                'parameters' => [],
+                'has_parameters' => false,
+            ];
+            $this->routes[] = $route;
+            $this->routeIndex->addRouteDirect($method, $path, $route, false);
+            return;
+        }
+
         $compiled = self::compilePattern($path);
+        $hasParameters = count($compiled['parameters']) > 0;
 
         $route = [
             'method' => $method,
             'path' => $path,
-            'middlewares' => array_merge($this->getGroupMiddlewaresForPath($path), $middlewares),
+            'middlewares' => $routeMiddlewares,
             'handler' => $resolvedHandler,
-            'metadata' => self::sanitizeForJson($metadata),
+            'metadata' => $metadata === [] ? [] : self::sanitizeForJson($metadata),
             'pattern' => $compiled['pattern'],
             'parameters' => $compiled['parameters'],
-            'has_parameters' => count($compiled['parameters']) > 0
+            'has_parameters' => $hasParameters,
         ];
 
         $this->routes[] = $route;
-        $this->routeIndex->addRoute($route);
+        $this->routeIndex->addRouteDirect($method, $path, $route, $hasParameters);
     }
 
     /**
@@ -255,7 +277,11 @@ class Router
         }
 
         $normalizedPath = RouteIndex::normalizePathForMatching($path);
-        $policy = $this->methodPolicies[$method] ?? new DefaultMethodPolicy();
+        $policy = $this->customPolicies[$method] ?? match ($method) {
+            'HEAD' => self::$headPolicy ??= new HeadMethodPolicy(),
+            'OPTIONS' => self::$optionsPolicy ??= new OptionsMethodPolicy(),
+            default => self::$defaultPolicy ??= new DefaultMethodPolicy(),
+        };
 
         return $policy->resolve($method, $normalizedPath, $path, $this->routeIndex);
     }
@@ -411,9 +437,13 @@ class Router
         $parameters = [];
         $position = 0;
 
-        $pattern = self::processRegexBlocks($pattern, $parameters, $position);
-        $pattern = self::processBraceParameters($pattern, $parameters, $position);
-        $pattern = self::processNamedParameters($pattern, $parameters, $position);
+        if (str_contains($pattern, '{')) {
+            $pattern = self::processRegexBlocks($pattern, $parameters, $position) ?? '';
+            $pattern = self::processBraceParameters($pattern, $parameters, $position) ?? '';
+        }
+        if (str_contains($pattern, ':')) {
+            $pattern = self::processNamedParameters($pattern, $parameters, $position) ?? '';
+        }
 
         $compiledPattern = self::finalizePattern($pattern);
 
@@ -582,18 +612,20 @@ class Router
 
     private static function finalizePattern(?string $pattern): string
     {
-        if ($pattern === null) {
-            $pattern = '';
+        if ($pattern === null || $pattern === '') {
+            return '#^/?$#';
         }
 
-        $pattern = self::escapeDots($pattern);
+        if (str_contains($pattern, '.')) {
+            $pattern = self::escapeDots($pattern) ?? $pattern;
+        }
 
-        if ($pattern !== '' && $pattern !== null) {
+        if (str_contains($pattern, '//')) {
             $normalizedPattern = preg_replace('#/+#', '/', $pattern);
             $pattern = $normalizedPattern !== null ? $normalizedPattern : $pattern;
         }
 
-        $pattern = rtrim($pattern ?? '', '/');
+        $pattern = rtrim($pattern, '/');
 
         return '#^' . $pattern . '/?$#';
     }
