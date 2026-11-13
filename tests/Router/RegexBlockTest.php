@@ -23,7 +23,6 @@ class RegexBlockTest extends TestCase
     {
         $this->reflection = new ReflectionClass(Router::class);
         $this->processRegexBlocksMethod = $this->reflection->getMethod('processRegexBlocks');
-        $this->processRegexBlocksMethod->setAccessible(true);
     }
 
     /**
